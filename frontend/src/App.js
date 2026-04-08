@@ -1,53 +1,114 @@
-import { useEffect } from "react";
-import "@/App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import axios from "axios";
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { Toaster } from './hooks/use-toast';
+import Login from './pages/auth/Login';
+import Register from './pages/auth/Register';
+import ClientDashboard from './pages/client/ClientDashboard';
+import AdvocateDashboard from './pages/advocate/AdvocateDashboard';
+import ManagerDashboard from './pages/manager/ManagerDashboard';
+import { Loader2 } from 'lucide-react';
+import './App.css';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+// Protected Route Component
+const ProtectedRoute = ({ children, allowedRoles }) => {
+  const { user, loading, isAuthenticated } = useAuth();
 
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (allowedRoles && !allowedRoles.includes(user?.role)) {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+};
+
+// Home redirect based on role
 const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
-    }
-  };
+  const { user, loading } = useAuth();
 
-  useEffect(() => {
-    helloWorldApi();
-  }, []);
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
 
-  return (
-    <div>
-      <header className="App-header">
-        <a
-          className="App-link"
-          href="https://emergent.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
-        </a>
-        <p className="mt-5">Building something incredible ~!</p>
-      </header>
-    </div>
-  );
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // Redirect based on role
+  if (user.role === 'client') {
+    return <Navigate to="/client/dashboard" replace />;
+  } else if (user.role === 'advocate') {
+    return <Navigate to="/advocate/dashboard" replace />;
+  } else if (user.role === 'platform_manager') {
+    return <Navigate to="/manager/dashboard" replace />;
+  }
+
+  return <Navigate to="/login" replace />;
 };
 
 function App() {
   return (
-    <div className="App">
+    <AuthProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Home />}>
-            <Route index element={<Home />} />
-          </Route>
+          {/* Public Routes */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+
+          {/* Home / Dashboard Redirect */}
+          <Route path="/" element={<Home />} />
+
+          {/* Client Routes */}
+          <Route
+            path="/client/dashboard"
+            element={
+              <ProtectedRoute allowedRoles={['client']}>
+                <ClientDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Advocate Routes */}
+          <Route
+            path="/advocate/dashboard"
+            element={
+              <ProtectedRoute allowedRoles={['advocate']}>
+                <AdvocateDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Manager Routes */}
+          <Route
+            path="/manager/dashboard"
+            element={
+              <ProtectedRoute allowedRoles={['platform_manager']}>
+                <ManagerDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Catch all */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
-    </div>
+      <Toaster />
+    </AuthProvider>
   );
 }
 

@@ -6,8 +6,24 @@ from typing import Dict, List
 from models import CaseType, AIQueryResponse, GroqAILog
 from datetime import datetime
 
-# Initialize Groq client
-groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+from dotenv import load_dotenv
+from pathlib import Path
+
+# Load environment variables
+ROOT_DIR = Path(__file__).parent
+load_dotenv(ROOT_DIR / '.env')
+
+# Initialize Groq client (lazy)
+_groq_client = None
+
+def get_groq_client():
+    global _groq_client
+    if _groq_client is None:
+        api_key = os.environ.get("GROQ_API_KEY")
+        if not api_key:
+            raise ValueError("GROQ_API_KEY not found in environment")
+        _groq_client = Groq(api_key=api_key)
+    return _groq_client
 
 # Prompt templates for different case types
 CASE_PROMPTS = {
@@ -127,7 +143,9 @@ async def analyze_case_with_groq(case_type: CaseType, description: str, addition
     )
     
     try:
+
         # Call Groq API
+        groq_client = get_groq_client()
         chat_completion = groq_client.chat.completions.create(
             messages=[
                 {

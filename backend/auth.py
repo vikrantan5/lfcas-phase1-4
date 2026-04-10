@@ -1,85 +1,199 @@
-# Authentication utilities
-from datetime import datetime, timedelta
-from typing import Optional
-from jose import JWTError, jwt
-from passlib.context import CryptContext
+# Supabase Authentication Utilities for LFCAS
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPBearer
+from typing import Optional, List
 import os
+from supabase import create_client, Client
+from dotenv import load_dotenv
+from pathlib import Path
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Load environment variables
+ROOT_DIR = Path(__file__).parent
+load_dotenv(ROOT_DIR / '.env')
 
-# JWT Configuration
-SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "default-secret-key")
-ALGORITHM = os.environ.get("JWT_ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", 1440))
+# Supabase client
+supabase_url = os.environ.get('SUPABASE_URL')
+supabase_service_key = os.environ.get('SUPABASE_SERVICE_ROLE_KEY')
+supabase: Client = create_client(supabase_url, supabase_service_key)
 
-# Security scheme
+# HTTP Bearer security
 security = HTTPBearer()
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a plain password against a hashed password"""
-    return pwd_context.verify(plain_password, hashed_password)
-
-
-def get_password_hash(password: str) -> str:
-    """Hash a password"""
-    return pwd_context.hash(password)
-
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    """Create a JWT access token"""
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-
-def decode_token(token: str) -> dict:
-    """Decode a JWT token"""
+async def get_current_user(credentials = Depends(security)) -> dict:
+    """
+    Validate Supabase JWT token and return user information
+    """
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload
-    except JWTError:
+        token = credentials.credentials
+        
+        # Verify token with Supabase
+        user_response = supabase.auth.get_user(token)
+        
+        if not user_response or not user_response.user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication credentials",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        auth_user = user_response.user
+        
+        # Get additional user profile from our users table
+        user_profile = supabase.table('users').select('*').eq('auth_user_id', auth_user.id).execute()
+        
+        if not user_profile.data or len(user_profile.data) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User profile not found"
+            )
+        
+        profile = user_profile.data[0]
+        
+        return {
+            "user_id": profile['id'],
+            "auth_user_id": auth_user.id,
+            "email": profile['email'],
+            "role": profile['role'],
+            "full_name": profile['full_name'],
+            "is_active": profile['is_active']
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
+            detail=f"Could not validate credentials: {str(e)}",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
-    """Get the current authenticated user from the token"""
-    token = credentials.credentials
-    payload = decode_token(token)
-    
-    user_id: str = payload.get("sub")
-    role: str = payload.get("role")
-    
-    if user_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    return {"user_id": user_id, "role": role, "email": payload.get("email")}
-
-
-def require_role(allowed_roles: list):
-    """Dependency to check if user has required role"""
-    async def role_checker(current_user: dict = Depends(get_current_user)):
+def require_role(allowed_roles: List[str]):
+    """
+    Dependency to check if user has required role
+    """
+    async def role_checker(current_user: dict = Depends(get_current_user)) -> dict:
         if current_user["role"] not in allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not enough permissions"
+                detail=f"Insufficient permissions. Required roles: {', '.join(allowed_roles)}"
             )
         return current_user
+    
     return role_checker
+
+async def create_user_with_auth(email: str, password: str, full_name: str, phone: Optional[str], role: str) -> dict:
+    """
+    Create a new user in Supabase Auth and our users table
+    """
+    try:
+        # Create user in Supabase Auth using admin API
+        auth_response = supabase.auth.admin.create_user({
+            "email": email,
+            "password": password,
+            "email_confirm": True  # Auto-confirm email for testing
+        })
+        
+        if not auth_response.user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to create auth user"
+            )
+        
+        auth_user = auth_response.user
+        
+        # Create user profile in our users table
+        user_data = {
+            "auth_user_id": auth_user.id,
+            "email": email,
+            "full_name": full_name,
+            "phone": phone,
+            "role": role,
+            "is_active": True
+        }
+        
+        user_profile = supabase.table('users').insert(user_data).execute()
+        
+        if not user_profile.data or len(user_profile.data) == 0:
+            # Try to clean up auth user
+            try:
+                supabase.auth.admin.delete_user(auth_user.id)
+            except:
+                pass
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create user profile"
+            )
+        
+        return {
+            "user": user_profile.data[0],
+            "session": None  # Admin creation doesn't return session
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Registration failed: {str(e)}"
+        )
+
+
+async def login_user(email: str, password: str) -> dict:
+    """
+    Login user with Supabase Auth
+    """
+    try:
+        # Sign in with Supabase
+        auth_response = supabase.auth.sign_in_with_password({
+            "email": email,
+            "password": password
+        })
+        
+        if not auth_response.user or not auth_response.session:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password"
+            )
+        
+        # Get user profile
+        user_profile = supabase.table('users').select('*').eq('auth_user_id', auth_response.user.id).execute()
+        
+        if not user_profile.data or len(user_profile.data) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User profile not found"
+            )
+        
+        profile = user_profile.data[0]
+        
+        # Check if user is active
+        if not profile['is_active']:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account is inactive"
+            )
+        
+        return {
+            "access_token": auth_response.session.access_token,
+            "refresh_token": auth_response.session.refresh_token,
+            "token_type": "bearer",
+            "user": profile
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Login failed: {str(e)}"
+        )
+
+
+# Utility function to get Supabase client (for use in other modules)
+def get_supabase_client() -> Client:
+    """
+    Returns the Supabase client for direct database operations
+    """
+    return supabase

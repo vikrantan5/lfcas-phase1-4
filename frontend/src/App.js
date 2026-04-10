@@ -1,10 +1,11 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { Toaster } from './hooks/use-toast';
+import { Toaster } from './components/ui/toaster';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import ClientDashboard from './pages/client/ClientDashboard';
+import CaseDetailPage from './pages/client/CaseDetail';
 import AdvocateDashboard from './pages/advocate/AdvocateDashboard';
 import ManagerDashboard from './pages/manager/ManagerDashboard';
 import { Loader2 } from 'lucide-react';
@@ -79,6 +80,14 @@ function App() {
             element={
               <ProtectedRoute allowedRoles={['client']}>
                 <ClientDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/client/cases/:caseId"
+            element={
+              <ProtectedRoute allowedRoles={['client']}>
+                <CaseDetailPage />
               </ProtectedRoute>
             }
           />

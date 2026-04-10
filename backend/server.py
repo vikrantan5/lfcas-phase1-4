@@ -35,14 +35,39 @@ from auth import (
 )
 from groq_service import analyze_case_with_groq, get_advocate_recommendation_criteria
 from cloudinary_service import upload_document_to_cloudinary, delete_document_from_cloudinary
-
 # Load environment variables
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
+# Configure logging - MUST COME FIRST
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 # MongoDB connection
+# MongoDB connection with explicit TLS 1.2
+import ssl
+import certifi
+
 mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
+
+# Create SSL context with TLS 1.2
+ssl_context = ssl.create_default_context(cafile=certifi.where())
+ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
+ssl_context.maximum_version = ssl.TLSVersion.TLSv1_2
+
+client = AsyncIOMotorClient(
+    mongo_url,
+    serverSelectionTimeoutMS=5000,
+    connectTimeoutMS=10000,
+    socketTimeoutMS=10000,
+    tls=True,
+    tlsAllowInvalidCertificates=True,  # For development
+    tlsCAFile=certifi.where()
+)
+
 db = client[os.environ['DB_NAME']]
 
 # Create indexes for better performance
@@ -70,6 +95,9 @@ app = FastAPI(title="Legal Family Case Advisor System")
 
 # Create API router
 api_router = APIRouter(prefix="/api")
+
+# ============= AUTHENTICATION ENDPOINTS =============
+# ... rest of your code continues here ...
 
 # Configure logging
 logging.basicConfig(
@@ -1012,7 +1040,22 @@ socket_app = socketio.ASGIApp(sio, app)
 # Startup event
 @app.on_event("startup")
 async def startup_event():
-    await create_indexes()
+    try:
+        # Test MongoDB connection
+        await client.admin.command('ping')
+        logger.info("MongoDB connection successful")
+        
+        # Create indexes in background
+        try:
+            await create_indexes()
+            logger.info("Database indexes created successfully")
+        except Exception as e:
+            logger.warning(f"Index creation failed (non-critical): {e}")
+            
+    except Exception as e:
+        logger.error(f"MongoDB connection failed: {e}")
+        logger.warning("Continuing without MongoDB connection...")
+    
     logger.info("LFCAS Backend started successfully")
 
 

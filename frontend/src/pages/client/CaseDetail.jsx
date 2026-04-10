@@ -20,7 +20,7 @@ const CaseDetailPage = () => {
   const { caseId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [caseData, setCase Data] = useState(null);
+const [caseData, setCaseData] = useState(null);
   const [documents, setDocuments] = useState([]);
   const [hearings, setHearings] = useState([]);
   const [messages, setMessages] = useState([]);
@@ -38,10 +38,10 @@ const CaseDetailPage = () => {
   const loadCaseDetails = async () => {
     try {
       const [caseRes, docsRes, hearingsRes, messagesRes] = await Promise.all([
-        caseAPI.get(caseId),
-        documentAPI.getByCase(caseId),
-        hearingAPI.getByCase(caseId),
-        messageAPI.getByCase(caseId)
+       caseAPI.getById(caseId),
+        documentAPI.getByCaseId(caseId),
+        hearingAPI.getByCaseId(caseId),
+        messageAPI.getByCaseId(caseId)
       ]);
 
       setCaseData(caseRes.data);

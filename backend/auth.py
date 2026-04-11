@@ -11,9 +11,13 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# Supabase client
+# Supabase client - Using service role key for backend operations (bypasses RLS)
 supabase_url = os.environ.get('SUPABASE_URL')
 supabase_service_key = os.environ.get('SUPABASE_SERVICE_ROLE_KEY')
+
+if not supabase_url or not supabase_service_key:
+    raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set in environment variables")
+
 supabase: Client = create_client(supabase_url, supabase_service_key)
 
 # HTTP Bearer security
@@ -88,11 +92,16 @@ async def create_user_with_auth(email: str, password: str, full_name: str, phone
     Create a new user in Supabase Auth and our users table
     """
     try:
-        # Create user in Supabase Auth using admin API
-        auth_response = supabase.auth.admin.create_user({
+        # Create user in Supabase Auth using sign_up (works without admin privileges)
+        auth_response = supabase.auth.sign_up({
             "email": email,
             "password": password,
-            "email_confirm": True  # Auto-confirm email for testing
+            "options": {
+                "data": {
+                    "full_name": full_name,
+                    "role": role
+                }
+            }
         })
         
         if not auth_response.user:
@@ -116,11 +125,6 @@ async def create_user_with_auth(email: str, password: str, full_name: str, phone
         user_profile = supabase.table('users').insert(user_data).execute()
         
         if not user_profile.data or len(user_profile.data) == 0:
-            # Try to clean up auth user
-            try:
-                supabase.auth.admin.delete_user(auth_user.id)
-            except:
-                pass
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to create user profile"
@@ -128,7 +132,7 @@ async def create_user_with_auth(email: str, password: str, full_name: str, phone
         
         return {
             "user": user_profile.data[0],
-            "session": None  # Admin creation doesn't return session
+            "session": None  # We don't return session on registration for security
         }
         
     except HTTPException:

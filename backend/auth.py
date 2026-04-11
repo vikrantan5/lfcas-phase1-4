@@ -92,15 +92,14 @@ async def create_user_with_auth(email: str, password: str, full_name: str, phone
     Create a new user in Supabase Auth and our users table
     """
     try:
-        # Create user in Supabase Auth using sign_up (works without admin privileges)
-        auth_response = supabase.auth.sign_up({
+        # Create user in Supabase Auth using Admin API (bypasses rate limits with service role key)
+        auth_response = supabase.auth.admin.create_user({
             "email": email,
             "password": password,
-            "options": {
-                "data": {
-                    "full_name": full_name,
-                    "role": role
-                }
+            "email_confirm": True,  # Auto-confirm email for development
+            "user_metadata": {
+                "full_name": full_name,
+                "role": role
             }
         })
         

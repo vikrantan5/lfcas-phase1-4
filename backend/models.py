@@ -1,6 +1,6 @@
-# MongoDB Models for LFCAS
+# Supabase PostgreSQL Models for LFCAS - Phase 5-9 Refactored
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
-from typing import Optional, List, Literal
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
 import uuid
@@ -22,11 +22,14 @@ class CaseType(str, Enum):
     OTHER = "other"
 
 
+# NEW: Extended Case Status for proper lifecycle
 class CaseStatus(str, Enum):
-    PENDING = "pending"
-    IN_PROGRESS = "in_progress"
+    INITIATED = "initiated"
+    PETITION_FILED = "petition_filed"
+    COURT_REVIEW = "court_review"
     HEARING_SCHEDULED = "hearing_scheduled"
-    AWAITING_JUDGMENT = "awaiting_judgment"
+    HEARING_DONE = "hearing_done"
+    JUDGMENT_PENDING = "judgment_pending"
     CLOSED = "closed"
 
 
@@ -43,6 +46,7 @@ class MessageType(str, Enum):
     SYSTEM = "system"
 
 
+# NEW: Extended Notification Types
 class NotificationType(str, Enum):
     CASE_UPDATE = "case_update"
     HEARING_REMINDER = "hearing_reminder"
@@ -50,6 +54,36 @@ class NotificationType(str, Enum):
     DOCUMENT_UPLOADED = "document_uploaded"
     ADVOCATE_ASSIGNED = "advocate_assigned"
     SYSTEM = "system"
+    # New types for meeting workflow
+    MEETING_REQUESTED = "meeting_requested"
+    MEETING_ACCEPTED = "meeting_accepted"
+    MEETING_REJECTED = "meeting_rejected"
+    MEETING_SCHEDULED = "meeting_scheduled"
+    CASE_APPROVED = "case_approved"
+    CASE_REJECTED_BY_ADVOCATE = "case_rejected_by_advocate"
+
+
+# NEW: Meeting Request Status
+class MeetingRequestStatus(str, Enum):
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    EXPIRED = "expired"
+
+
+# NEW: Meeting Status
+class MeetingStatus(str, Enum):
+    SCHEDULED = "scheduled"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+    NO_SHOW = "no_show"
+
+
+# NEW: Advocate Decision
+class AdvocateDecision(str, Enum):
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
 
 
 # ============= USER MODELS =============
@@ -77,16 +111,22 @@ class User(UserBase):
     model_config = ConfigDict(extra="ignore")
     
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    hashed_password: str
+    auth_user_id: Optional[str] = None
     is_active: bool = True
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
-class UserResponse(UserBase):
+class UserResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
     id: str
-    is_active: bool
-    created_at: datetime
+    email: str
+    full_name: str
+    phone: Optional[str] = None
+    role: str
+    is_active: bool = True
+    created_at: Optional[datetime] = None
 
 
 # ============= ADVOCATE MODELS =============
@@ -117,21 +157,121 @@ class AdvocateCreate(BaseModel):
 
 
 class AdvocateResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
     id: str
     user_id: str
     bar_council_id: str
-    specialization: List[CaseType]
+    specialization: List[str]
     experience_years: int
     location: str
-    bio: Optional[str]
-    status: AdvocateStatus
-    rating: float
-    total_cases: int
-    active_cases: int
+    bio: Optional[str] = None
+    status: str
+    rating: float = 0.0
+    total_cases: int = 0
+    active_cases: int = 0
     user: Optional[UserResponse] = None
+    created_at: Optional[datetime] = None
 
 
-# ============= CASE MODELS =============
+# ============= NEW: MEETING REQUEST MODELS =============
+class MeetingRequestCreate(BaseModel):
+    advocate_id: str
+    case_type: CaseType
+    description: str
+    location: str
+    preferred_date: Optional[datetime] = None
+    ai_analysis: Optional[Dict[str, Any]] = None
+
+
+class MeetingRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    client_id: str
+    advocate_id: str
+    case_type: CaseType
+    description: str
+    location: str
+    preferred_date: Optional[datetime] = None
+    ai_analysis: Optional[Dict[str, Any]] = None
+    status: MeetingRequestStatus = MeetingRequestStatus.PENDING
+    rejection_reason: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class MeetingRequestResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str
+    client_id: str
+    advocate_id: str
+    case_type: str
+    description: str
+    location: str
+    preferred_date: Optional[datetime] = None
+    ai_analysis: Optional[Dict[str, Any]] = None
+    status: str
+    rejection_reason: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    client: Optional[UserResponse] = None
+    advocate: Optional[AdvocateResponse] = None
+
+
+# ============= NEW: MEETING MODELS =============
+class MeetingCreate(BaseModel):
+    meeting_request_id: str
+    scheduled_date: datetime
+    meeting_mode: str = "online"  # online, in_person
+    meeting_link: Optional[str] = None
+    meeting_location: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class Meeting(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    meeting_request_id: str
+    client_id: str
+    advocate_id: str
+    scheduled_date: datetime
+    meeting_mode: str = "online"
+    meeting_link: Optional[str] = None
+    meeting_location: Optional[str] = None
+    notes: Optional[str] = None
+    status: MeetingStatus = MeetingStatus.SCHEDULED
+    advocate_decision: AdvocateDecision = AdvocateDecision.PENDING
+    decision_notes: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class MeetingResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str
+    meeting_request_id: str
+    client_id: str
+    advocate_id: str
+    scheduled_date: datetime
+    meeting_mode: str
+    meeting_link: Optional[str] = None
+    meeting_location: Optional[str] = None
+    notes: Optional[str] = None
+    status: str
+    advocate_decision: str
+    decision_notes: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    client: Optional[UserResponse] = None
+    advocate: Optional[AdvocateResponse] = None
+    meeting_request: Optional[MeetingRequestResponse] = None
+
+
+# ============= CASE MODELS (REFACTORED) =============
 class CaseBase(BaseModel):
     case_type: CaseType
     title: str
@@ -140,7 +280,7 @@ class CaseBase(BaseModel):
 
 
 class CaseCreate(CaseBase):
-    pass
+    meeting_id: str  # NEW: Case can only be created after meeting approval
 
 
 class Case(CaseBase):
@@ -148,9 +288,11 @@ class Case(CaseBase):
     
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     client_id: str
-    advocate_id: Optional[str] = None
-    status: CaseStatus = CaseStatus.PENDING
-    ai_analysis: Optional[dict] = None
+    advocate_id: str  # Required now - case created only after advocate accepts
+    meeting_id: str  # Reference to the meeting that led to case creation
+    status: CaseStatus = CaseStatus.INITIATED
+    current_stage: str = "INITIATED"
+    ai_analysis: Optional[Dict[str, Any]] = None
     required_documents: List[str] = []
     legal_sections: List[str] = []
     procedural_guidance: Optional[str] = None
@@ -158,9 +300,47 @@ class Case(CaseBase):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
-class CaseResponse(Case):
+class CaseResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str
+    client_id: str
+    advocate_id: Optional[str] = None
+    meeting_id: Optional[str] = None
+    case_type: str
+    title: str
+    description: str
+    location: str
+    status: str
+    current_stage: Optional[str] = None
+    ai_analysis: Optional[Dict[str, Any]] = None
+    required_documents: Optional[List[str]] = None
+    legal_sections: Optional[List[str]] = None
+    procedural_guidance: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
     client: Optional[UserResponse] = None
     advocate: Optional[AdvocateResponse] = None
+
+
+# ============= NEW: CASE STAGE HISTORY =============
+class CaseStageHistoryCreate(BaseModel):
+    case_id: str
+    from_stage: Optional[str]
+    to_stage: str
+    notes: Optional[str] = None
+
+
+class CaseStageHistory(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    case_id: str
+    from_stage: Optional[str] = None
+    to_stage: str
+    changed_by: str
+    notes: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 # ============= HEARING MODELS =============
@@ -212,7 +392,8 @@ class Document(BaseModel):
 
 # ============= MESSAGE MODELS =============
 class MessageCreate(BaseModel):
-    case_id: str
+    case_id: Optional[str] = None
+    meeting_request_id: Optional[str] = None  # NEW: Allow messaging before case creation
     content: str
     message_type: MessageType = MessageType.TEXT
     attachment_url: Optional[str] = None
@@ -222,7 +403,8 @@ class Message(BaseModel):
     model_config = ConfigDict(extra="ignore")
     
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    case_id: str
+    case_id: Optional[str] = None
+    meeting_request_id: Optional[str] = None
     sender_id: str
     receiver_id: str
     content: str
@@ -275,7 +457,7 @@ class AdminLog(BaseModel):
     action: str
     target_type: str
     target_id: str
-    details: Optional[dict] = None
+    details: Optional[Dict[str, Any]] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -287,7 +469,7 @@ class GroqAILog(BaseModel):
     user_id: str
     case_id: Optional[str] = None
     query: str
-    response: dict
+    response: Dict[str, Any]
     tokens_used: Optional[int] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -296,7 +478,8 @@ class GroqAILog(BaseModel):
 class AIQueryRequest(BaseModel):
     case_type: CaseType
     description: str
-    additional_details: Optional[dict] = None
+    location: Optional[str] = None
+    additional_details: Optional[Dict[str, Any]] = None
 
 
 class AIQueryResponse(BaseModel):
@@ -307,3 +490,4 @@ class AIQueryResponse(BaseModel):
     recommended_actions: List[str]
     estimated_timeline: str
     important_notes: List[str]
+    recommended_advocates: Optional[List[AdvocateResponse]] = None

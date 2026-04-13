@@ -1,5 +1,6 @@
 # Complete FastAPI Backend for Legal Family Case Advisor System (LFCAS)
-# Migrated to Supabase PostgreSQL
+# Phase 5-9 Refactored - Correct Workflow Implementation
+# Flow: AI Query → Advocate Recommendation → Meeting Request → Meeting → Case Creation
 
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from fastapi.responses import JSONResponse
@@ -9,7 +10,7 @@ from dotenv import load_dotenv
 import os
 import logging
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict
 import json
 import uuid
@@ -25,9 +26,14 @@ from models import (
     Notification, NotificationType,
     Rating, RatingCreate,
     AdminLog, GroqAILog,
-    AIQueryRequest
+    AIQueryRequest,
+    # New models for workflow
+    MeetingRequest, MeetingRequestCreate, MeetingRequestResponse, MeetingRequestStatus,
+    Meeting, MeetingCreate, MeetingResponse, MeetingStatus, AdvocateDecision,
+    CaseStageHistory, CaseStageHistoryCreate
 )
 from pydantic import BaseModel
+
 # Import services
 from auth import (
     get_current_user, require_role, create_user_with_auth, 
@@ -38,6 +44,27 @@ from groq_service import analyze_case_with_groq, get_advocate_recommendation_cri
 # Additional models for API requests
 class StatusUpdate(BaseModel):
     new_status: AdvocateStatus
+
+class MeetingRequestResponseAction(BaseModel):
+    action: str  # 'accept' or 'reject'
+    rejection_reason: Optional[str] = None
+
+class ScheduleMeetingRequest(BaseModel):
+    meeting_request_id: str
+    scheduled_date: datetime
+    meeting_mode: str = "online"
+    meeting_link: Optional[str] = None
+    meeting_location: Optional[str] = None
+    notes: Optional[str] = None
+
+class AdvocateDecisionRequest(BaseModel):
+    decision: str  # 'accept' or 'reject'
+    decision_notes: Optional[str] = None
+    case_title: Optional[str] = None
+
+class CaseStageUpdateRequest(BaseModel):
+    new_stage: str
+    notes: Optional[str] = None
 
 # Load environment variables
 ROOT_DIR = Path(__file__).parent
@@ -62,7 +89,7 @@ sio = socketio.AsyncServer(
 )
 
 # Create FastAPI app
-app = FastAPI(title="Legal Family Case Advisor System - Supabase")
+app = FastAPI(title="Legal Family Case Advisor System - Refactored")
 
 # Create API router
 api_router = APIRouter(prefix="/api")
@@ -198,8 +225,8 @@ async def get_advocate(advocate_id: str):
     adv = result.data[0]
     user_data = adv.pop('users', None)
     adv_response = AdvocateResponse(**adv)
-    if user_data and len(user_data) > 0:
-        adv_response.user = UserResponse(**user_data[0])
+    if user_data:
+        adv_response.user = UserResponse(**user_data)
     
     return adv_response
 
@@ -241,19 +268,43 @@ async def update_advocate_status(
     return {"message": "Status updated successfully"}
 
 
-# ============= AI QUERY ENDPOINTS =============
+# ============= AI QUERY ENDPOINTS (REFACTORED - No Case Creation) =============
 @api_router.post("/ai/analyze")
 async def analyze_legal_query(
     query: AIQueryRequest,
     current_user: dict = Depends(get_current_user)
 ):
-    """Analyze legal query using Groq AI"""
+    """
+    Analyze legal query using Groq AI and return recommended advocates.
+    This does NOT create a case - it just provides analysis and recommendations.
+    """
     # Call Groq service
     ai_result = await analyze_case_with_groq(
         case_type=query.case_type,
         description=query.description,
         additional_details=query.additional_details
     )
+    
+    # Get recommended advocates based on case type and location
+    recommended_advocates = []
+    try:
+        adv_query = supabase.table('advocates').select('*, users!inner(*)').eq('status', 'approved')
+        
+        if query.case_type:
+            adv_query = adv_query.contains('specialization', [query.case_type.value])
+        if query.location:
+            adv_query = adv_query.ilike('location', f'%{query.location}%')
+        
+        adv_result = adv_query.order('rating', desc=True).order('experience_years', desc=True).limit(5).execute()
+        
+        for adv in adv_result.data:
+            user_data = adv.pop('users', None)
+            adv_response = AdvocateResponse(**adv)
+            if user_data:
+                adv_response.user = UserResponse(**user_data)
+            recommended_advocates.append(adv_response)
+    except Exception as e:
+        logger.error(f"Error fetching advocates: {e}")
     
     # Log the query
     log = {
@@ -264,56 +315,456 @@ async def analyze_legal_query(
     }
     supabase.table('groq_ai_logs').insert(log).execute()
     
-    return ai_result
+    return {
+        "ai_analysis": ai_result,
+        "recommended_advocates": [adv.model_dump() for adv in recommended_advocates]
+    }
 
-
-# ============= CASE ENDPOINTS =============
-@api_router.post("/cases", response_model=CaseResponse)
-async def create_case(
-    case_data: CaseCreate,
+# ============= NEW: MEETING REQUEST ENDPOINTS =============
+@api_router.post("/meeting-requests", response_model=MeetingRequestResponse)
+async def create_meeting_request(
+    request_data: MeetingRequestCreate,
     current_user: dict = Depends(require_role([UserRole.CLIENT]))
 ):
-    """Create a new case"""
-    # Get AI analysis
-    ai_result = await analyze_case_with_groq(
-        case_type=case_data.case_type,
-        description=case_data.description
-    )
+    """
+    Client requests a meeting with an advocate.
+    This is the first step after AI analysis and advocate selection.
+    """
+    # Verify advocate exists and is approved
+    advocate = supabase.table('advocates').select('*, users(*)').eq('id', request_data.advocate_id).eq('status', 'approved').execute()
+    if not advocate.data or len(advocate.data) == 0:
+        raise HTTPException(status_code=404, detail="Advocate not found or not approved")
     
-    # Create case
-    case = {
+    # Check for existing pending request with same advocate
+    existing = supabase.table('meeting_requests').select('*').eq('client_id', current_user["user_id"]).eq('advocate_id', request_data.advocate_id).eq('status', 'pending').execute()
+    
+    if existing.data and len(existing.data) > 0:
+        raise HTTPException(status_code=400, detail="You already have a pending meeting request with this advocate")
+    
+    # Create meeting request
+    meeting_request = {
         "client_id": current_user["user_id"],
-        "case_type": case_data.case_type,
-        "title": case_data.title,
-        "description": case_data.description,
-        "location": case_data.location,
-        "ai_analysis": ai_result.get("data", {}),
-        "required_documents": ai_result.get("data", {}).get("required_documents", []),
-        "legal_sections": ai_result.get("data", {}).get("legal_sections", []),
-        "procedural_guidance": ai_result.get("data", {}).get("procedural_guidance", ""),
-        "status": CaseStatus.PENDING
+        "advocate_id": request_data.advocate_id,
+        "case_type": request_data.case_type.value,
+        "description": request_data.description,
+        "location": request_data.location,
+        "preferred_date": request_data.preferred_date.isoformat() if request_data.preferred_date else None,
+        "ai_analysis": request_data.ai_analysis,
+        "status": MeetingRequestStatus.PENDING
     }
     
-    result = supabase.table('cases').insert(case).execute()
+    result = supabase.table('meeting_requests').insert(meeting_request).execute()
     
     if not result.data or len(result.data) == 0:
-        raise HTTPException(status_code=500, detail="Failed to create case")
+        raise HTTPException(status_code=500, detail="Failed to create meeting request")
     
-    created_case = result.data[0]
+    created_request = result.data[0]
     
-    # Create notification
+    # Notify advocate
+    advocate_data = advocate.data[0]
     notification = {
-        "user_id": current_user["user_id"],
-        "notification_type": NotificationType.CASE_UPDATE,
-        "title": "Case Created",
-        "message": f"Your case '{case_data.title}' has been created successfully.",
-        "related_id": created_case['id']
+        "user_id": advocate_data["user_id"],
+        "notification_type": NotificationType.MEETING_REQUESTED,
+        "title": "New Meeting Request",
+        "message": f"A client has requested a meeting regarding a {request_data.case_type.value} case.",
+        "related_id": created_request['id']
     }
     supabase.table('notifications').insert(notification).execute()
     
-    return CaseResponse(**created_case)
+    # Emit real-time event
+    await sio.emit('meeting_request', created_request, room=advocate_data["user_id"])
+    
+    return MeetingRequestResponse(**created_request)
+
+@api_router.get("/meeting-requests", response_model=List[MeetingRequestResponse])
+async def list_meeting_requests(
+    status: Optional[MeetingRequestStatus] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """List meeting requests for the current user"""
+    query = supabase.table('meeting_requests').select('*, client:users!meeting_requests_client_id_fkey(*), advocate:advocates!meeting_requests_advocate_id_fkey(*, users(*))')
+    
+    # Filter based on role
+    if current_user["role"] == UserRole.CLIENT:
+        query = query.eq('client_id', current_user["user_id"])
+    elif current_user["role"] == UserRole.ADVOCATE:
+        # Get advocate profile first
+        adv_profile = supabase.table('advocates').select('id').eq('user_id', current_user["user_id"]).execute()
+        if adv_profile.data and len(adv_profile.data) > 0:
+            query = query.eq('advocate_id', adv_profile.data[0]['id'])
+        else:
+            return []
+    
+    if status:
+        query = query.eq('status', status)
+    
+    result = query.order('created_at', desc=True).execute()
+    
+    requests = []
+    for req in result.data:
+        client_data = req.pop('client', None)
+        advocate_data = req.pop('advocate', None)
+        
+        req_response = MeetingRequestResponse(**req)
+        if client_data:
+            req_response.client = UserResponse(**client_data)
+        if advocate_data:
+            user_data = advocate_data.pop('users', None)
+            adv_response = AdvocateResponse(**advocate_data)
+            if user_data:
+                adv_response.user = UserResponse(**user_data)
+            req_response.advocate = adv_response
+        
+        requests.append(req_response)
+    
+    return requests
 
 
+@api_router.get("/meeting-requests/{request_id}", response_model=MeetingRequestResponse)
+async def get_meeting_request(
+    request_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get meeting request details"""
+    result = supabase.table('meeting_requests').select('*, client:users!meeting_requests_client_id_fkey(*), advocate:advocates!meeting_requests_advocate_id_fkey(*, users(*))').eq('id', request_id).execute()
+    
+    if not result.data or len(result.data) == 0:
+        raise HTTPException(status_code=404, detail="Meeting request not found")
+    
+    req = result.data[0]
+    client_data = req.pop('client', None)
+    advocate_data = req.pop('advocate', None)
+    
+    req_response = MeetingRequestResponse(**req)
+    if client_data:
+        req_response.client = UserResponse(**client_data)
+    if advocate_data:
+        user_data = advocate_data.pop('users', None)
+        adv_response = AdvocateResponse(**advocate_data)
+        if user_data:
+            adv_response.user = UserResponse(**user_data)
+        req_response.advocate = adv_response
+    
+    return req_response
+
+
+@api_router.patch("/meeting-requests/{request_id}/respond")
+async def respond_to_meeting_request(
+    request_id: str,
+    response_data: MeetingRequestResponseAction,
+    current_user: dict = Depends(require_role([UserRole.ADVOCATE]))
+):
+    """Advocate accepts or rejects a meeting request"""
+    # Get meeting request
+    result = supabase.table('meeting_requests').select('*').eq('id', request_id).execute()
+    
+    if not result.data or len(result.data) == 0:
+        raise HTTPException(status_code=404, detail="Meeting request not found")
+    
+    meeting_request = result.data[0]
+    
+    # Verify advocate owns this request
+    adv_profile = supabase.table('advocates').select('id').eq('user_id', current_user["user_id"]).execute()
+    if not adv_profile.data or adv_profile.data[0]['id'] != meeting_request['advocate_id']:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    if meeting_request['status'] != 'pending':
+        raise HTTPException(status_code=400, detail="Meeting request is not pending")
+    
+    # Update status
+    new_status = MeetingRequestStatus.ACCEPTED if response_data.action == 'accept' else MeetingRequestStatus.REJECTED
+    update_data = {"status": new_status}
+    if response_data.rejection_reason:
+        update_data["rejection_reason"] = response_data.rejection_reason
+    
+    supabase.table('meeting_requests').update(update_data).eq('id', request_id).execute()
+    
+    # Notify client
+    notification_type = NotificationType.MEETING_ACCEPTED if response_data.action == 'accept' else NotificationType.MEETING_REJECTED
+    notification = {
+        "user_id": meeting_request["client_id"],
+        "notification_type": notification_type,
+        "title": f"Meeting Request {response_data.action.capitalize()}ed",
+        "message": f"Your meeting request has been {response_data.action}ed by the advocate." + (f" Reason: {response_data.rejection_reason}" if response_data.rejection_reason else ""),
+        "related_id": request_id
+    }
+    supabase.table('notifications').insert(notification).execute()
+    
+    # Emit real-time event
+    await sio.emit('meeting_request_response', {
+        'request_id': request_id,
+        'action': response_data.action,
+        'rejection_reason': response_data.rejection_reason
+    }, room=meeting_request["client_id"])
+    
+    return {"message": f"Meeting request {response_data.action}ed successfully"}
+
+
+# ============= NEW: MEETING ENDPOINTS =============
+@api_router.post("/meetings", response_model=MeetingResponse)
+async def schedule_meeting(
+    meeting_data: ScheduleMeetingRequest,
+    current_user: dict = Depends(require_role([UserRole.ADVOCATE]))
+):
+    """Advocate schedules a meeting after accepting the request"""
+    # Get meeting request
+    request_result = supabase.table('meeting_requests').select('*').eq('id', meeting_data.meeting_request_id).execute()
+    
+    if not request_result.data or len(request_result.data) == 0:
+        raise HTTPException(status_code=404, detail="Meeting request not found")
+    
+    meeting_request = request_result.data[0]
+    
+    # Verify advocate
+    adv_profile = supabase.table('advocates').select('id').eq('user_id', current_user["user_id"]).execute()
+    if not adv_profile.data or adv_profile.data[0]['id'] != meeting_request['advocate_id']:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    if meeting_request['status'] != 'accepted':
+        raise HTTPException(status_code=400, detail="Meeting request must be accepted first")
+    
+    # Check if meeting already exists
+    existing_meeting = supabase.table('meetings').select('*').eq('meeting_request_id', meeting_data.meeting_request_id).execute()
+    if existing_meeting.data and len(existing_meeting.data) > 0:
+        raise HTTPException(status_code=400, detail="Meeting already scheduled for this request")
+    
+    # Create meeting
+    meeting = {
+        "meeting_request_id": meeting_data.meeting_request_id,
+        "client_id": meeting_request["client_id"],
+        "advocate_id": meeting_request["advocate_id"],
+        "scheduled_date": meeting_data.scheduled_date.isoformat(),
+        "meeting_mode": meeting_data.meeting_mode,
+        "meeting_link": meeting_data.meeting_link,
+        "meeting_location": meeting_data.meeting_location,
+        "notes": meeting_data.notes,
+        "status": MeetingStatus.SCHEDULED,
+        "advocate_decision": AdvocateDecision.PENDING
+    }
+    
+    result = supabase.table('meetings').insert(meeting).execute()
+    
+    if not result.data or len(result.data) == 0:
+        raise HTTPException(status_code=500, detail="Failed to schedule meeting")
+    
+    created_meeting = result.data[0]
+    
+    # Notify client
+    notification = {
+        "user_id": meeting_request["client_id"],
+        "notification_type": NotificationType.MEETING_SCHEDULED,
+        "title": "Meeting Scheduled",
+        "message": f"Your meeting has been scheduled for {meeting_data.scheduled_date.strftime('%B %d, %Y at %I:%M %p')}",
+        "related_id": created_meeting['id']
+    }
+    supabase.table('notifications').insert(notification).execute()
+    
+    # Emit real-time event
+    await sio.emit('meeting_scheduled', created_meeting, room=meeting_request["client_id"])
+    
+    return MeetingResponse(**created_meeting)
+
+
+@api_router.get("/meetings", response_model=List[MeetingResponse])
+async def list_meetings(
+    status: Optional[MeetingStatus] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """List meetings for the current user"""
+    query = supabase.table('meetings').select('*, client:users!meetings_client_id_fkey(*), advocate:advocates!meetings_advocate_id_fkey(*, users(*))')
+    
+    # Filter based on role
+    if current_user["role"] == UserRole.CLIENT:
+        query = query.eq('client_id', current_user["user_id"])
+    elif current_user["role"] == UserRole.ADVOCATE:
+        adv_profile = supabase.table('advocates').select('id').eq('user_id', current_user["user_id"]).execute()
+        if adv_profile.data and len(adv_profile.data) > 0:
+            query = query.eq('advocate_id', adv_profile.data[0]['id'])
+        else:
+            return []
+    
+    if status:
+        query = query.eq('status', status)
+    
+    result = query.order('scheduled_date', desc=True).execute()
+    
+    meetings = []
+    for m in result.data:
+        client_data = m.pop('client', None)
+        advocate_data = m.pop('advocate', None)
+        
+        m_response = MeetingResponse(**m)
+        if client_data:
+            m_response.client = UserResponse(**client_data)
+        if advocate_data:
+            user_data = advocate_data.pop('users', None)
+            adv_response = AdvocateResponse(**advocate_data)
+            if user_data:
+                adv_response.user = UserResponse(**user_data)
+            m_response.advocate = adv_response
+        
+        meetings.append(m_response)
+    
+    return meetings
+
+
+@api_router.get("/meetings/{meeting_id}", response_model=MeetingResponse)
+async def get_meeting(
+    meeting_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get meeting details"""
+    result = supabase.table('meetings').select('*, client:users!meetings_client_id_fkey(*), advocate:advocates!meetings_advocate_id_fkey(*, users(*))').eq('id', meeting_id).execute()
+    
+    if not result.data or len(result.data) == 0:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    
+    m = result.data[0]
+    client_data = m.pop('client', None)
+    advocate_data = m.pop('advocate', None)
+    
+    m_response = MeetingResponse(**m)
+    if client_data:
+        m_response.client = UserResponse(**client_data)
+    if advocate_data:
+        user_data = advocate_data.pop('users', None)
+        adv_response = AdvocateResponse(**advocate_data)
+        if user_data:
+            adv_response.user = UserResponse(**user_data)
+        m_response.advocate = adv_response
+    
+    return m_response
+
+
+@api_router.patch("/meetings/{meeting_id}/complete")
+async def complete_meeting(
+    meeting_id: str,
+    current_user: dict = Depends(require_role([UserRole.ADVOCATE]))
+):
+    """Mark meeting as completed"""
+    # Get meeting
+    result = supabase.table('meetings').select('*').eq('id', meeting_id).execute()
+    
+    if not result.data or len(result.data) == 0:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    
+    meeting = result.data[0]
+    
+    # Verify advocate
+    adv_profile = supabase.table('advocates').select('id').eq('user_id', current_user["user_id"]).execute()
+    if not adv_profile.data or adv_profile.data[0]['id'] != meeting['advocate_id']:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Update meeting status
+    supabase.table('meetings').update({"status": MeetingStatus.COMPLETED}).eq('id', meeting_id).execute()
+    
+    return {"message": "Meeting marked as completed"}
+
+
+@api_router.patch("/meetings/{meeting_id}/decision")
+async def advocate_case_decision(
+    meeting_id: str,
+    decision_data: AdvocateDecisionRequest,
+    current_user: dict = Depends(require_role([UserRole.ADVOCATE]))
+):
+    """
+    Advocate decides to accept or reject taking the case after the meeting.
+    If accepted, a case is automatically created.
+    """
+    # Get meeting with request details
+    meeting_result = supabase.table('meetings').select('*, meeting_requests(*)').eq('id', meeting_id).execute()
+    
+    if not meeting_result.data or len(meeting_result.data) == 0:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    
+    meeting = meeting_result.data[0]
+    meeting_request = meeting.get('meeting_requests')
+    
+    # Verify advocate
+    adv_profile = supabase.table('advocates').select('id').eq('user_id', current_user["user_id"]).execute()
+    if not adv_profile.data or adv_profile.data[0]['id'] != meeting['advocate_id']:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    if meeting['status'] != 'completed':
+        raise HTTPException(status_code=400, detail="Meeting must be completed first")
+    
+    if meeting['advocate_decision'] != 'pending':
+        raise HTTPException(status_code=400, detail="Decision already made")
+    
+    # Update meeting decision
+    decision = AdvocateDecision.ACCEPTED if decision_data.decision == 'accept' else AdvocateDecision.REJECTED
+    supabase.table('meetings').update({
+        "advocate_decision": decision,
+        "decision_notes": decision_data.decision_notes
+    }).eq('id', meeting_id).execute()
+    
+    created_case = None
+    
+    if decision_data.decision == 'accept':
+        # CREATE THE CASE - This is the correct place for case creation!
+        case_data = {
+            "client_id": meeting['client_id'],
+            "advocate_id": meeting['advocate_id'],
+            "meeting_id": meeting_id,
+            "case_type": meeting_request['case_type'] if meeting_request else 'other',
+            "title": decision_data.case_title or f"Case from Meeting {meeting_id[:8]}",
+            "description": meeting_request['description'] if meeting_request else '',
+            "location": meeting_request['location'] if meeting_request else '',
+            "status": CaseStatus.INITIATED,
+            "current_stage": "INITIATED",
+            "ai_analysis": meeting_request.get('ai_analysis') if meeting_request else None,
+            "required_documents": meeting_request.get('ai_analysis', {}).get('data', {}).get('required_documents', []) if meeting_request else [],
+            "legal_sections": meeting_request.get('ai_analysis', {}).get('data', {}).get('legal_sections', []) if meeting_request else [],
+            "procedural_guidance": meeting_request.get('ai_analysis', {}).get('data', {}).get('procedural_guidance', '') if meeting_request else ''
+        }
+        
+        case_result = supabase.table('cases').insert(case_data).execute()
+        
+        if case_result.data and len(case_result.data) > 0:
+            created_case = case_result.data[0]
+            
+            # Create initial stage history
+            stage_history = {
+                "case_id": created_case['id'],
+                "from_stage": None,
+                "to_stage": "INITIATED",
+                "changed_by": current_user["user_id"],
+                "notes": "Case created after advocate accepted"
+            }
+            supabase.table('case_stage_history').insert(stage_history).execute()
+            
+            # Notify client about case creation
+            notification = {
+                "user_id": meeting['client_id'],
+                "notification_type": NotificationType.CASE_APPROVED,
+                "title": "Case Created!",
+                "message": "The advocate has accepted your case. Your legal case has been officially created and is now in progress.",
+                "related_id": created_case['id']
+            }
+            supabase.table('notifications').insert(notification).execute()
+            
+            # Emit real-time event
+            await sio.emit('case_created', created_case, room=meeting['client_id'])
+    else:
+        # Notify client about rejection
+        notification = {
+            "user_id": meeting['client_id'],
+            "notification_type": NotificationType.CASE_REJECTED_BY_ADVOCATE,
+            "title": "Case Not Accepted",
+            "message": f"The advocate has decided not to take your case." + (f" Reason: {decision_data.decision_notes}" if decision_data.decision_notes else " You can request a meeting with another advocate."),
+            "related_id": meeting_id
+        }
+        supabase.table('notifications').insert(notification).execute()
+        
+        await sio.emit('case_rejected', {'meeting_id': meeting_id, 'reason': decision_data.decision_notes}, room=meeting['client_id'])
+    
+    return {
+        "message": f"Decision recorded: Case {'accepted and created' if decision_data.decision == 'accept' else 'rejected'}",
+        "case": created_case
+    }
+
+
+# ============= CASE ENDPOINTS (REFACTORED) =============
 @api_router.get("/cases", response_model=List[CaseResponse])
 async def list_cases(
     status: Optional[CaseStatus] = None,
@@ -321,13 +772,17 @@ async def list_cases(
     current_user: dict = Depends(get_current_user)
 ):
     """List cases based on user role"""
-    query = supabase.table('cases').select('*, users!cases_client_id_fkey(*)')
+    query = supabase.table('cases').select('*, client:users!cases_client_id_fkey(*), advocate:advocates!cases_advocate_id_fkey(*, users(*))')
     
     # Filter based on role
     if current_user["role"] == UserRole.CLIENT:
         query = query.eq('client_id', current_user["user_id"])
     elif current_user["role"] == UserRole.ADVOCATE:
-        query = query.eq('advocate_id', current_user["user_id"])
+        adv_profile = supabase.table('advocates').select('id').eq('user_id', current_user["user_id"]).execute()
+        if adv_profile.data and len(adv_profile.data) > 0:
+            query = query.eq('advocate_id', adv_profile.data[0]['id'])
+        else:
+            return []
     # Platform managers can see all cases
     
     if status:
@@ -339,17 +794,20 @@ async def list_cases(
     
     cases = []
     for case_data in result.data:
-        client_data = case_data.pop('users', None)
+        client_data = case_data.pop('client', None)
+        advocate_data = case_data.pop('advocate', None)
+        
         case_response = CaseResponse(**case_data)
         
         if client_data:
             case_response.client = UserResponse(**client_data)
         
-        # Get advocate details if assigned
-        if case_data.get("advocate_id"):
-            advocate = supabase.table('advocates').select('*').eq('id', case_data["advocate_id"]).execute()
-            if advocate.data and len(advocate.data) > 0:
-                case_response.advocate = AdvocateResponse(**advocate.data[0])
+        if advocate_data:
+            user_data = advocate_data.pop('users', None)
+            adv_response = AdvocateResponse(**advocate_data)
+            if user_data:
+                adv_response.user = UserResponse(**user_data)
+            case_response.advocate = adv_response
         
         cases.append(case_response)
     
@@ -362,111 +820,115 @@ async def get_case(
     current_user: dict = Depends(get_current_user)
 ):
     """Get case details"""
-    result = supabase.table('cases').select('*').eq('id', case_id).execute()
+    result = supabase.table('cases').select('*, client:users!cases_client_id_fkey(*), advocate:advocates!cases_advocate_id_fkey(*, users(*))').eq('id', case_id).execute()
     
     if not result.data or len(result.data) == 0:
         raise HTTPException(status_code=404, detail="Case not found")
     
     case = result.data[0]
+    client_data = case.pop('client', None)
+    advocate_data = case.pop('advocate', None)
     
     # Check access permissions
     if current_user["role"] == UserRole.CLIENT and case["client_id"] != current_user["user_id"]:
         raise HTTPException(status_code=403, detail="Access denied")
-    elif current_user["role"] == UserRole.ADVOCATE and case.get("advocate_id") != current_user["user_id"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    elif current_user["role"] == UserRole.ADVOCATE:
+        adv_profile = supabase.table('advocates').select('id').eq('user_id', current_user["user_id"]).execute()
+        if not adv_profile.data or adv_profile.data[0]['id'] != case.get("advocate_id"):
+            raise HTTPException(status_code=403, detail="Access denied")
     
     case_response = CaseResponse(**case)
     
-    # Get client details
-    client = supabase.table('users').select('*').eq('id', case["client_id"]).execute()
-    if client.data and len(client.data) > 0:
-        case_response.client = UserResponse(**client.data[0])
-    
-    # Get advocate details if assigned
-    if case.get("advocate_id"):
-        advocate = supabase.table('advocates').select('*').eq('id', case["advocate_id"]).execute()
-        if advocate.data and len(advocate.data) > 0:
-            case_response.advocate = AdvocateResponse(**advocate.data[0])
+    if client_data:
+        case_response.client = UserResponse(**client_data)
+    if advocate_data:
+        user_data = advocate_data.pop('users', None)
+        adv_response = AdvocateResponse(**advocate_data)
+        if user_data:
+            adv_response.user = UserResponse(**user_data)
+        case_response.advocate = adv_response
     
     return case_response
 
 
-@api_router.patch("/cases/{case_id}/assign-advocate")
-async def assign_advocate_to_case(
+# ============= CASE LIFECYCLE MANAGEMENT =============
+@api_router.patch("/cases/{case_id}/stage")
+async def update_case_stage(
     case_id: str,
-    advocate_id: str,
-    current_user: dict = Depends(require_role([UserRole.CLIENT]))
+    stage_data: CaseStageUpdateRequest,
+    current_user: dict = Depends(require_role([UserRole.ADVOCATE, UserRole.PLATFORM_MANAGER]))
 ):
-    """Assign an advocate to a case"""
-    # Verify advocate exists and is approved
-    advocate = supabase.table('advocates').select('*').eq('id', advocate_id).eq('status', AdvocateStatus.APPROVED).execute()
-    if not advocate.data or len(advocate.data) == 0:
-        raise HTTPException(status_code=404, detail="Advocate not found or not approved")
+    """Update case stage (lifecycle progression)"""
+    # Valid stage transitions
+    valid_stages = ["INITIATED", "PETITION_FILED", "COURT_REVIEW", "HEARING_SCHEDULED", "HEARING_DONE", "JUDGMENT_PENDING", "CLOSED"]
     
-    # Update case
-    result = supabase.table('cases').update({
-        "advocate_id": advocate_id,
-        "status": CaseStatus.IN_PROGRESS
-    }).eq('id', case_id).eq('client_id', current_user["user_id"]).execute()
+    if stage_data.new_stage not in valid_stages:
+        raise HTTPException(status_code=400, detail=f"Invalid stage. Valid stages: {', '.join(valid_stages)}")
     
-    if not result.data or len(result.data) == 0:
-        raise HTTPException(status_code=404, detail="Case not found or access denied")
+    # Get case
+    case_result = supabase.table('cases').select('*').eq('id', case_id).execute()
     
-    # Notify advocate
+    if not case_result.data or len(case_result.data) == 0:
+        raise HTTPException(status_code=404, detail="Case not found")
+    
+    case = case_result.data[0]
+    current_stage = case.get('current_stage', 'INITIATED')
+    
+    # Verify advocate access
+    if current_user["role"] == UserRole.ADVOCATE:
+        adv_profile = supabase.table('advocates').select('id').eq('user_id', current_user["user_id"]).execute()
+        if not adv_profile.data or adv_profile.data[0]['id'] != case.get("advocate_id"):
+            raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Update case stage
+    new_status = CaseStatus.CLOSED if stage_data.new_stage == "CLOSED" else case['status']
+    supabase.table('cases').update({
+        "current_stage": stage_data.new_stage,
+        "status": new_status
+    }).eq('id', case_id).execute()
+    
+    # Record stage history
+    stage_history = {
+        "case_id": case_id,
+        "from_stage": current_stage,
+        "to_stage": stage_data.new_stage,
+        "changed_by": current_user["user_id"],
+        "notes": stage_data.notes
+    }
+    supabase.table('case_stage_history').insert(stage_history).execute()
+    
+    # Notify client
     notification = {
-        "user_id": advocate.data[0]["user_id"],
-        "notification_type": NotificationType.ADVOCATE_ASSIGNED,
-        "title": "New Case Assigned",
-        "message": "You have been assigned to a new case.",
+        "user_id": case["client_id"],
+        "notification_type": NotificationType.CASE_UPDATE,
+        "title": "Case Stage Updated",
+        "message": f"Your case has progressed to: {stage_data.new_stage.replace('_', ' ').title()}",
         "related_id": case_id
     }
     supabase.table('notifications').insert(notification).execute()
     
-    # Notify client
-    notification2 = {
-        "user_id": current_user["user_id"],
-        "notification_type": NotificationType.ADVOCATE_ASSIGNED,
-        "title": "Advocate Assigned",
-        "message": "An advocate has been assigned to your case.",
-        "related_id": case_id
-    }
-    supabase.table('notifications').insert(notification2).execute()
-    
-    return {"message": "Advocate assigned successfully"}
+    return {"message": f"Case stage updated to {stage_data.new_stage}"}
 
 
-@api_router.patch("/cases/{case_id}/status")
-async def update_case_status(
+@api_router.get("/cases/{case_id}/stage-history")
+async def get_case_stage_history(
     case_id: str,
-    new_status: CaseStatus,
-    current_user: dict = Depends(require_role([UserRole.ADVOCATE, UserRole.PLATFORM_MANAGER]))
+    current_user: dict = Depends(get_current_user)
 ):
-    """Update case status"""
+    """Get case stage history"""
+    # Verify access
     case = supabase.table('cases').select('*').eq('id', case_id).execute()
-    
     if not case.data or len(case.data) == 0:
         raise HTTPException(status_code=404, detail="Case not found")
     
     case_data = case.data[0]
     
-    # Check permissions
-    if current_user["role"] == UserRole.ADVOCATE and case_data.get("advocate_id") != current_user["user_id"]:
+    if current_user["role"] == UserRole.CLIENT and case_data["client_id"] != current_user["user_id"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Update status
-    supabase.table('cases').update({"status": new_status}).eq('id', case_id).execute()
+    result = supabase.table('case_stage_history').select('*').eq('case_id', case_id).order('created_at', desc=True).execute()
     
-    # Notify client
-    notification = {
-        "user_id": case_data["client_id"],
-        "notification_type": NotificationType.CASE_UPDATE,
-        "title": "Case Status Updated",
-        "message": f"Your case status has been updated to: {new_status}",
-        "related_id": case_id
-    }
-    supabase.table('notifications').insert(notification).execute()
-    
-    return {"message": "Case status updated successfully"}
+    return result.data
 
 
 # ============= HEARING ENDPOINTS =============
@@ -477,10 +939,17 @@ async def create_hearing(
 ):
     """Create a hearing schedule"""
     # Verify case exists and advocate has access
-    case = supabase.table('cases').select('*').eq('id', hearing_data.case_id).eq('advocate_id', current_user["user_id"]).execute()
+    case = supabase.table('cases').select('*').eq('id', hearing_data.case_id).execute()
     
     if not case.data or len(case.data) == 0:
-        raise HTTPException(status_code=404, detail="Case not found or access denied")
+        raise HTTPException(status_code=404, detail="Case not found")
+    
+    case_data = case.data[0]
+    
+    # Verify advocate
+    adv_profile = supabase.table('advocates').select('id').eq('user_id', current_user["user_id"]).execute()
+    if not adv_profile.data or adv_profile.data[0]['id'] != case_data.get("advocate_id"):
+        raise HTTPException(status_code=403, detail="Access denied")
     
     # Create hearing
     hearing = {
@@ -496,15 +965,18 @@ async def create_hearing(
     if not result.data or len(result.data) == 0:
         raise HTTPException(status_code=500, detail="Failed to create hearing")
     
-    # Update case status
-    supabase.table('cases').update({"status": CaseStatus.HEARING_SCHEDULED}).eq('id', hearing_data.case_id).execute()
+    # Update case stage
+    supabase.table('cases').update({
+        "current_stage": "HEARING_SCHEDULED",
+        "status": CaseStatus.HEARING_SCHEDULED
+    }).eq('id', hearing_data.case_id).execute()
     
     # Notify client
     notification = {
-        "user_id": case.data[0]["client_id"],
+        "user_id": case_data["client_id"],
         "notification_type": NotificationType.HEARING_REMINDER,
         "title": "Hearing Scheduled",
-        "message": f"A hearing has been scheduled for {hearing_data.hearing_date}",
+        "message": f"A hearing has been scheduled for {hearing_data.hearing_date.strftime('%B %d, %Y')}",
         "related_id": result.data[0]['id']
     }
     supabase.table('notifications').insert(notification).execute()
@@ -526,9 +998,7 @@ async def get_case_hearings(
     
     case_data = case.data[0]
     
-    # Fixed: Added backslash for line continuation
-    if (current_user["role"] == UserRole.CLIENT and case_data["client_id"] != current_user["user_id"]) or \
-       (current_user["role"] == UserRole.ADVOCATE and case_data.get("advocate_id") != current_user["user_id"]):
+    if current_user["role"] == UserRole.CLIENT and case_data["client_id"] != current_user["user_id"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
     result = supabase.table('hearings').select('*').eq('case_id', case_id).order('hearing_date').execute()
@@ -546,7 +1016,7 @@ async def upload_document(
     description: Optional[str] = Form(None),
     current_user: dict = Depends(get_current_user)
 ):
-    """Upload a document to a case using Supabase Storage"""
+    """Upload a document to a case"""
     # Verify case access
     case = supabase.table('cases').select('*').eq('id', case_id).execute()
     
@@ -555,10 +1025,12 @@ async def upload_document(
     
     case_data = case.data[0]
     
-    # Fixed: Added backslash for line continuation
-    if (current_user["role"] == UserRole.CLIENT and case_data["client_id"] != current_user["user_id"]) or \
-       (current_user["role"] == UserRole.ADVOCATE and case_data.get("advocate_id") != current_user["user_id"]):
+    if current_user["role"] == UserRole.CLIENT and case_data["client_id"] != current_user["user_id"]:
         raise HTTPException(status_code=403, detail="Access denied")
+    elif current_user["role"] == UserRole.ADVOCATE:
+        adv_profile = supabase.table('advocates').select('id').eq('user_id', current_user["user_id"]).execute()
+        if not adv_profile.data or adv_profile.data[0]['id'] != case_data.get("advocate_id"):
+            raise HTTPException(status_code=403, detail="Access denied")
     
     try:
         # Read file content
@@ -585,8 +1057,8 @@ async def upload_document(
             "uploaded_by": current_user["user_id"],
             "document_name": document_name,
             "document_type": document_type,
-            "cloudinary_url": public_url,  # Using same field name for compatibility
-            "cloudinary_public_id": unique_filename,  # Store path for future deletion
+            "cloudinary_url": public_url,
+            "cloudinary_public_id": unique_filename,
             "description": description,
             "file_size": file_size
         }
@@ -599,6 +1071,12 @@ async def upload_document(
         # Notify other party
         notify_user_id = case_data.get("advocate_id") if current_user["role"] == UserRole.CLIENT else case_data["client_id"]
         if notify_user_id:
+            # Get advocate's user_id if notifying advocate
+            if current_user["role"] == UserRole.CLIENT:
+                adv = supabase.table('advocates').select('user_id').eq('id', notify_user_id).execute()
+                if adv.data:
+                    notify_user_id = adv.data[0]['user_id']
+            
             notification = {
                 "user_id": notify_user_id,
                 "notification_type": NotificationType.DOCUMENT_UPLOADED,
@@ -629,9 +1107,7 @@ async def get_case_documents(
     
     case_data = case.data[0]
     
-    # Fixed: Added backslash for line continuation
-    if (current_user["role"] == UserRole.CLIENT and case_data["client_id"] != current_user["user_id"]) or \
-       (current_user["role"] == UserRole.ADVOCATE and case_data.get("advocate_id") != current_user["user_id"]):
+    if current_user["role"] == UserRole.CLIENT and case_data["client_id"] != current_user["user_id"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
     result = supabase.table('documents').select('*').eq('case_id', case_id).order('created_at', desc=True).execute()
@@ -645,31 +1121,61 @@ async def send_message(
     message_data: MessageCreate,
     current_user: dict = Depends(get_current_user)
 ):
-    """Send a message in a case"""
-    # Verify case access
-    case = supabase.table('cases').select('*').eq('id', message_data.case_id).execute()
+    """Send a message"""
+    receiver_id = None
     
-    if not case.data or len(case.data) == 0:
-        raise HTTPException(status_code=404, detail="Case not found")
+    if message_data.case_id:
+        # Message within a case
+        case = supabase.table('cases').select('*').eq('id', message_data.case_id).execute()
+        
+        if not case.data or len(case.data) == 0:
+            raise HTTPException(status_code=404, detail="Case not found")
+        
+        case_data = case.data[0]
+        
+        if current_user["role"] == UserRole.CLIENT:
+            if case_data["client_id"] != current_user["user_id"]:
+                raise HTTPException(status_code=403, detail="Access denied")
+            # Get advocate's user_id
+            if case_data.get("advocate_id"):
+                adv = supabase.table('advocates').select('user_id').eq('id', case_data["advocate_id"]).execute()
+                if adv.data:
+                    receiver_id = adv.data[0]['user_id']
+        else:
+            adv_profile = supabase.table('advocates').select('id').eq('user_id', current_user["user_id"]).execute()
+            if not adv_profile.data or adv_profile.data[0]['id'] != case_data.get("advocate_id"):
+                raise HTTPException(status_code=403, detail="Access denied")
+            receiver_id = case_data["client_id"]
     
-    case_data = case.data[0]
-    
-    # Determine receiver
-    if current_user["role"] == UserRole.CLIENT:
-        if case_data["client_id"] != current_user["user_id"]:
-            raise HTTPException(status_code=403, detail="Access denied")
-        receiver_id = case_data.get("advocate_id", "")
-    else:
-        if case_data.get("advocate_id") != current_user["user_id"]:
-            raise HTTPException(status_code=403, detail="Access denied")
-        receiver_id = case_data["client_id"]
+    elif message_data.meeting_request_id:
+        # Message for meeting request (pre-case)
+        req = supabase.table('meeting_requests').select('*').eq('id', message_data.meeting_request_id).execute()
+        
+        if not req.data or len(req.data) == 0:
+            raise HTTPException(status_code=404, detail="Meeting request not found")
+        
+        req_data = req.data[0]
+        
+        if current_user["role"] == UserRole.CLIENT:
+            if req_data["client_id"] != current_user["user_id"]:
+                raise HTTPException(status_code=403, detail="Access denied")
+            # Get advocate's user_id
+            adv = supabase.table('advocates').select('user_id').eq('id', req_data["advocate_id"]).execute()
+            if adv.data:
+                receiver_id = adv.data[0]['user_id']
+        else:
+            adv_profile = supabase.table('advocates').select('id').eq('user_id', current_user["user_id"]).execute()
+            if not adv_profile.data or adv_profile.data[0]['id'] != req_data["advocate_id"]:
+                raise HTTPException(status_code=403, detail="Access denied")
+            receiver_id = req_data["client_id"]
     
     if not receiver_id:
-        raise HTTPException(status_code=400, detail="No advocate assigned to this case")
+        raise HTTPException(status_code=400, detail="Could not determine message recipient")
     
     # Create message
     message = {
         "case_id": message_data.case_id,
+        "meeting_request_id": message_data.meeting_request_id,
         "sender_id": current_user["user_id"],
         "receiver_id": receiver_id,
         "content": message_data.content,
@@ -692,7 +1198,7 @@ async def send_message(
         "user_id": receiver_id,
         "notification_type": NotificationType.NEW_MESSAGE,
         "title": "New Message",
-        "message": "You have a new message in your case.",
+        "message": "You have a new message.",
         "related_id": msg['id']
     }
     supabase.table('notifications').insert(notification).execute()
@@ -714,15 +1220,27 @@ async def get_case_messages(
     
     case_data = case.data[0]
     
-    # Fixed: Added backslash for line continuation
-    if (current_user["role"] == UserRole.CLIENT and case_data["client_id"] != current_user["user_id"]) or \
-       (current_user["role"] == UserRole.ADVOCATE and case_data.get("advocate_id") != current_user["user_id"]):
+    if current_user["role"] == UserRole.CLIENT and case_data["client_id"] != current_user["user_id"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
     result = supabase.table('messages').select('*').eq('case_id', case_id).order('created_at').execute()
     
     # Mark messages as read
     supabase.table('messages').update({"is_read": True}).eq('case_id', case_id).eq('receiver_id', current_user["user_id"]).execute()
+    
+    return [Message(**m) for m in result.data]
+
+
+@api_router.get("/messages/meeting-request/{request_id}", response_model=List[Message])
+async def get_meeting_request_messages(
+    request_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get all messages for a meeting request"""
+    result = supabase.table('messages').select('*').eq('meeting_request_id', request_id).order('created_at').execute()
+    
+    # Mark messages as read
+    supabase.table('messages').update({"is_read": True}).eq('meeting_request_id', request_id).eq('receiver_id', current_user["user_id"]).execute()
     
     return [Message(**m) for m in result.data]
 
@@ -761,10 +1279,15 @@ async def create_rating(
 ):
     """Rate an advocate after case completion"""
     # Verify case is closed and belongs to user
-    case = supabase.table('cases').select('*').eq('id', rating_data.case_id).eq('client_id', current_user["user_id"]).eq('status', CaseStatus.CLOSED).execute()
+    case = supabase.table('cases').select('*').eq('id', rating_data.case_id).eq('client_id', current_user["user_id"]).execute()
     
     if not case.data or len(case.data) == 0:
-        raise HTTPException(status_code=404, detail="Case not found or not closed")
+        raise HTTPException(status_code=404, detail="Case not found")
+    
+    case_data = case.data[0]
+    
+    if case_data.get('current_stage') != 'CLOSED' and case_data.get('status') != 'closed':
+        raise HTTPException(status_code=400, detail="Case must be closed before rating")
     
     # Check if already rated
     existing = supabase.table('ratings').select('*').eq('case_id', rating_data.case_id).execute()
@@ -809,8 +1332,15 @@ async def get_platform_stats(
     pending_advocates = supabase.table('advocates').select('*', count='exact').eq('status', AdvocateStatus.PENDING_APPROVAL).execute().count
     
     total_cases = supabase.table('cases').select('*', count='exact').execute().count
-    active_cases = supabase.table('cases').select('*', count='exact').neq('status', CaseStatus.CLOSED).execute().count
-    closed_cases = supabase.table('cases').select('*', count='exact').eq('status', CaseStatus.CLOSED).execute().count
+    active_cases = supabase.table('cases').select('*', count='exact').neq('current_stage', 'CLOSED').execute().count
+    closed_cases = supabase.table('cases').select('*', count='exact').eq('current_stage', 'CLOSED').execute().count
+    
+    # Meeting requests stats
+    total_meeting_requests = supabase.table('meeting_requests').select('*', count='exact').execute().count
+    pending_meeting_requests = supabase.table('meeting_requests').select('*', count='exact').eq('status', 'pending').execute().count
+    
+    # Meetings stats
+    total_meetings = supabase.table('meetings').select('*', count='exact').execute().count
     
     # Case distribution by type
     case_types = {}
@@ -820,6 +1350,7 @@ async def get_platform_stats(
     
     # Recent activity
     recent_cases = supabase.table('cases').select('*').order('created_at', desc=True).limit(5).execute().data
+    recent_meetings = supabase.table('meetings').select('*').order('created_at', desc=True).limit(5).execute().data
     
     return {
         "users": {
@@ -837,7 +1368,15 @@ async def get_platform_stats(
             "closed": closed_cases,
             "by_type": case_types
         },
-        "recent_cases": recent_cases
+        "meeting_requests": {
+            "total": total_meeting_requests,
+            "pending": pending_meeting_requests
+        },
+        "meetings": {
+            "total": total_meetings
+        },
+        "recent_cases": recent_cases,
+        "recent_meetings": recent_meetings
     }
 
 
@@ -910,7 +1449,7 @@ async def new_message(sid, data):
             'case_id': case_id,
             'content': message_content,
             'sender_id': sender_id,
-            'created_at': datetime.utcnow().isoformat()
+            'created_at': datetime.now(timezone.utc).isoformat()
         }, room=f"case_{case_id}")
         
     except Exception as e:
@@ -922,10 +1461,11 @@ async def new_message(sid, data):
 @api_router.get("/")
 async def root():
     return {
-        "message": "Legal Family Case Advisor System API - Supabase Edition",
-        "version": "2.0.0",
+        "message": "Legal Family Case Advisor System API - Phase 5-9 Refactored",
+        "version": "3.0.0",
         "status": "operational",
-        "database": "Supabase PostgreSQL"
+        "database": "Supabase PostgreSQL",
+        "flow": "AI Query → Advocate Selection → Meeting Request → Meeting → Advocate Decision → Case Creation"
     }
 
 
@@ -956,7 +1496,7 @@ async def startup_event():
         logger.error(f"Supabase connection failed: {e}")
         logger.warning("Continuing without Supabase connection...")
     
-    logger.info("LFCAS Backend (Supabase) started successfully")
+    logger.info("LFCAS Backend (Refactored) started successfully")
 
 
 # Shutdown event

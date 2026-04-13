@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SocketProvider } from './contexts/SocketContext';
 import { Toaster } from './components/ui/toaster';
+import LandingPage from './pages/LandingPage';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import ClientDashboard from './pages/client/ClientDashboard';
@@ -35,7 +36,7 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   return children;
 };
 
-// Home redirect based on role
+// Home redirect based on authentication
 const Home = () => {
   const { user, loading } = useAuth();
 
@@ -47,20 +48,19 @@ const Home = () => {
     );
   }
 
-  if (!user) {
-    return <Navigate to="/login" replace />;
+  // If user is logged in, redirect to their dashboard
+  if (user) {
+    if (user.role === 'client') {
+      return <Navigate to="/client/dashboard" replace />;
+    } else if (user.role === 'advocate') {
+      return <Navigate to="/advocate/dashboard" replace />;
+    } else if (user.role === 'platform_manager') {
+      return <Navigate to="/manager/dashboard" replace />;
+    }
   }
 
-  // Redirect based on role
-  if (user.role === 'client') {
-    return <Navigate to="/client/dashboard" replace />;
-  } else if (user.role === 'advocate') {
-    return <Navigate to="/advocate/dashboard" replace />;
-  } else if (user.role === 'platform_manager') {
-    return <Navigate to="/manager/dashboard" replace />;
-  }
-
-  return <Navigate to="/login" replace />;
+  // If not logged in, show landing page
+  return <LandingPage />;
 };
 
 function App() {

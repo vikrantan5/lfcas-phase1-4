@@ -51,15 +51,29 @@ export const aiAPI = {
   analyze: (data) => api.post('/ai/analyze', data),
 };
 
-// Case APIs
+// Meeting Request APIs (NEW - Correct Flow)
+export const meetingRequestAPI = {
+  create: (data) => api.post('/meeting-requests', data),
+  list: (params) => api.get('/meeting-requests', { params }),
+  getById: (id) => api.get(`/meeting-requests/${id}`),
+  respond: (id, data) => api.patch(`/meeting-requests/${id}/respond`, data),
+};
+
+// Meeting APIs (NEW - Correct Flow)
+export const meetingAPI = {
+  schedule: (data) => api.post('/meetings', data),
+  list: (params) => api.get('/meetings', { params }),
+  getById: (id) => api.get(`/meetings/${id}`),
+  complete: (id) => api.patch(`/meetings/${id}/complete`),
+  decision: (id, data) => api.patch(`/meetings/${id}/decision`, data),
+};
+
+// Case APIs (Updated for new flow)
 export const caseAPI = {
-  create: (data) => api.post('/cases', data),
   list: (params) => api.get('/cases', { params }),
   getById: (id) => api.get(`/cases/${id}`),
-  assignAdvocate: (caseId, advocateId) => 
-    api.patch(`/cases/${caseId}/assign-advocate`, null, { params: { advocate_id: advocateId } }),
-  updateStatus: (caseId, status) => 
-    api.patch(`/cases/${caseId}/status`, null, { params: { new_status: status } }),
+  updateStage: (id, data) => api.patch(`/cases/${id}/stage`, data),
+  getStageHistory: (id) => api.get(`/cases/${id}/stage-history`),
 };
 
 // Hearing APIs
@@ -80,6 +94,7 @@ export const documentAPI = {
 export const messageAPI = {
   send: (data) => api.post('/messages', data),
   getByCaseId: (caseId) => api.get(`/messages/case/${caseId}`),
+  getByMeetingRequestId: (requestId) => api.get(`/messages/meeting-request/${requestId}`),
 };
 
 // Notification APIs

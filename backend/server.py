@@ -27,14 +27,17 @@ from models import (
     AdminLog, GroqAILog,
     AIQueryRequest
 )
-
+from pydantic import BaseModel
 # Import services
 from auth import (
     get_current_user, require_role, create_user_with_auth, 
     login_user, get_supabase_client
 )
 from groq_service import analyze_case_with_groq, get_advocate_recommendation_criteria
-from cloudinary_service import upload_document_to_cloudinary, delete_document_from_cloudinary
+
+# Additional models for API requests
+class StatusUpdate(BaseModel):
+    new_status: AdvocateStatus
 
 # Load environment variables
 ROOT_DIR = Path(__file__).parent
@@ -204,12 +207,12 @@ async def get_advocate(advocate_id: str):
 @api_router.patch("/advocates/{advocate_id}/status")
 async def update_advocate_status(
     advocate_id: str,
-    new_status: AdvocateStatus,
+    status_data: StatusUpdate,
     current_user: dict = Depends(require_role([UserRole.PLATFORM_MANAGER]))
 ):
     """Update advocate status (Admin only)"""
     result = supabase.table('advocates').update({
-        "status": new_status
+        "status": status_data.new_status
     }).eq('id', advocate_id).execute()
     
     if not result.data or len(result.data) == 0:
@@ -221,7 +224,7 @@ async def update_advocate_status(
         "action": "update_advocate_status",
         "target_type": "advocate",
         "target_id": advocate_id,
-        "details": {"new_status": new_status}
+        "details": {"new_status": status_data.new_status}
     }
     supabase.table('admin_logs').insert(admin_log).execute()
     
@@ -231,7 +234,7 @@ async def update_advocate_status(
         "user_id": advocate["user_id"],
         "notification_type": NotificationType.SYSTEM,
         "title": "Profile Status Updated",
-        "message": f"Your advocate profile status has been updated to: {new_status}"
+        "message": f"Your advocate profile status has been updated to: {status_data.new_status}"
     }
     supabase.table('notifications').insert(notification).execute()
     
@@ -523,7 +526,7 @@ async def get_case_hearings(
     
     case_data = case.data[0]
     
-    # FIXED: Add backslash for line continuation
+    # Fixed: Added backslash for line continuation
     if (current_user["role"] == UserRole.CLIENT and case_data["client_id"] != current_user["user_id"]) or \
        (current_user["role"] == UserRole.ADVOCATE and case_data.get("advocate_id") != current_user["user_id"]):
         raise HTTPException(status_code=403, detail="Access denied")
@@ -543,7 +546,7 @@ async def upload_document(
     description: Optional[str] = Form(None),
     current_user: dict = Depends(get_current_user)
 ):
-    """Upload a document to a case"""
+    """Upload a document to a case using Supabase Storage"""
     # Verify case access
     case = supabase.table('cases').select('*').eq('id', case_id).execute()
     
@@ -552,49 +555,64 @@ async def upload_document(
     
     case_data = case.data[0]
     
-    # FIXED: Add backslash for line continuation
+    # Fixed: Added backslash for line continuation
     if (current_user["role"] == UserRole.CLIENT and case_data["client_id"] != current_user["user_id"]) or \
        (current_user["role"] == UserRole.ADVOCATE and case_data.get("advocate_id") != current_user["user_id"]):
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Upload to Cloudinary
-    upload_result = await upload_document_to_cloudinary(file, folder=f"lfcas_cases/{case_id}")
-    
-    if not upload_result.get("success"):
-        raise HTTPException(status_code=500, detail=upload_result.get("error", "Upload failed"))
-    
-    # Rest of the function remains the same...
-    
-    # Create document record
-    document = {
-        "case_id": case_id,
-        "uploaded_by": current_user["user_id"],
-        "document_name": document_name,
-        "document_type": document_type,
-        "cloudinary_url": upload_result["url"],
-        "cloudinary_public_id": upload_result["public_id"],
-        "description": description,
-        "file_size": upload_result.get("size")
-    }
-    
-    result = supabase.table('documents').insert(document).execute()
-    
-    if not result.data or len(result.data) == 0:
-        raise HTTPException(status_code=500, detail="Failed to save document")
-    
-    # Notify other party
-    notify_user_id = case_data.get("advocate_id") if current_user["role"] == UserRole.CLIENT else case_data["client_id"]
-    if notify_user_id:
-        notification = {
-            "user_id": notify_user_id,
-            "notification_type": NotificationType.DOCUMENT_UPLOADED,
-            "title": "New Document Uploaded",
-            "message": f"A new document '{document_name}' has been uploaded to the case.",
-            "related_id": result.data[0]['id']
+    try:
+        # Read file content
+        file_content = await file.read()
+        file_size = len(file_content)
+        
+        # Generate unique filename
+        file_extension = file.filename.split('.')[-1] if '.' in file.filename else ''
+        unique_filename = f"{case_id}/{uuid.uuid4()}.{file_extension}" if file_extension else f"{case_id}/{uuid.uuid4()}"
+        
+        # Upload to Supabase Storage
+        storage_response = supabase.storage.from_('case-documents').upload(
+            path=unique_filename,
+            file=file_content,
+            file_options={"content-type": file.content_type}
+        )
+        
+        # Get public URL
+        public_url = supabase.storage.from_('case-documents').get_public_url(unique_filename)
+        
+        # Create document record
+        document = {
+            "case_id": case_id,
+            "uploaded_by": current_user["user_id"],
+            "document_name": document_name,
+            "document_type": document_type,
+            "cloudinary_url": public_url,  # Using same field name for compatibility
+            "cloudinary_public_id": unique_filename,  # Store path for future deletion
+            "description": description,
+            "file_size": file_size
         }
-        supabase.table('notifications').insert(notification).execute()
-    
-    return Document(**result.data[0])
+        
+        result = supabase.table('documents').insert(document).execute()
+        
+        if not result.data or len(result.data) == 0:
+            raise HTTPException(status_code=500, detail="Failed to save document metadata")
+        
+        # Notify other party
+        notify_user_id = case_data.get("advocate_id") if current_user["role"] == UserRole.CLIENT else case_data["client_id"]
+        if notify_user_id:
+            notification = {
+                "user_id": notify_user_id,
+                "notification_type": NotificationType.DOCUMENT_UPLOADED,
+                "title": "New Document Uploaded",
+                "message": f"A new document '{document_name}' has been uploaded to the case.",
+                "related_id": result.data[0]['id']
+            }
+            supabase.table('notifications').insert(notification).execute()
+        
+        return Document(**result.data[0])
+        
+    except Exception as e:
+        logger.error(f"Document upload error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 
 @api_router.get("/documents/case/{case_id}", response_model=List[Document])
@@ -611,7 +629,7 @@ async def get_case_documents(
     
     case_data = case.data[0]
     
-    # FIXED: Add backslash for line continuation
+    # Fixed: Added backslash for line continuation
     if (current_user["role"] == UserRole.CLIENT and case_data["client_id"] != current_user["user_id"]) or \
        (current_user["role"] == UserRole.ADVOCATE and case_data.get("advocate_id") != current_user["user_id"]):
         raise HTTPException(status_code=403, detail="Access denied")
@@ -696,7 +714,7 @@ async def get_case_messages(
     
     case_data = case.data[0]
     
-    # FIXED: Add backslash for line continuation
+    # Fixed: Added backslash for line continuation
     if (current_user["role"] == UserRole.CLIENT and case_data["client_id"] != current_user["user_id"]) or \
        (current_user["role"] == UserRole.ADVOCATE and case_data.get("advocate_id") != current_user["user_id"]):
         raise HTTPException(status_code=403, detail="Access denied")
@@ -854,7 +872,50 @@ async def join_room(sid, data):
     user_id = data.get('user_id')
     if user_id:
         sio.enter_room(sid, user_id)
-        logger.info(f"User {user_id} joined room")
+        logger.info(f"User {user_id} joined personal room (sid: {sid})")
+        await sio.emit('room_joined', {'user_id': user_id}, room=sid)
+
+
+@sio.event
+async def join_case(sid, data):
+    """Join a case-specific room for real-time messaging"""
+    case_id = data.get('case_id')
+    if case_id:
+        sio.enter_room(sid, f"case_{case_id}")
+        logger.info(f"Socket {sid} joined case room: {case_id}")
+        await sio.emit('case_joined', {'case_id': case_id}, room=sid)
+
+
+@sio.event
+async def leave_case(sid, data):
+    """Leave a case-specific room"""
+    case_id = data.get('case_id')
+    if case_id:
+        sio.leave_room(sid, f"case_{case_id}")
+        logger.info(f"Socket {sid} left case room: {case_id}")
+
+
+@sio.event
+async def new_message(sid, data):
+    """Handle new message from client and broadcast to case room"""
+    try:
+        case_id = data.get('case_id')
+        message_content = data.get('content')
+        sender_id = data.get('sender_id')
+        
+        logger.info(f"New message in case {case_id} from {sender_id}")
+        
+        # Broadcast to all clients in the case room
+        await sio.emit('new_message', {
+            'case_id': case_id,
+            'content': message_content,
+            'sender_id': sender_id,
+            'created_at': datetime.utcnow().isoformat()
+        }, room=f"case_{case_id}")
+        
+    except Exception as e:
+        logger.error(f"Error handling new message: {e}")
+        await sio.emit('error', {'message': 'Failed to send message'}, room=sid)
 
 
 # ============= ROOT ENDPOINT =============

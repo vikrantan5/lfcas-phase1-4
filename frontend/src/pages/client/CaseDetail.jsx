@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSocket } from '../../contexts/SocketContext';
 import { caseAPI, documentAPI, hearingAPI, messageAPI, advocateAPI } from '../../services/api';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
@@ -20,7 +21,9 @@ const CaseDetailPage = () => {
   const { caseId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-const [caseData, setCaseData] = useState(null);
+  const { connected, joinCaseRoom, leaveCaseRoom, onNewMessage, offNewMessage } = useSocket();
+  const messagesEndRef = useRef(null);
+  const [caseData, setCaseData] = useState(null);
   const [documents, setDocuments] = useState([]);
   const [hearings, setHearings] = useState([]);
   const [messages, setMessages] = useState([]);
@@ -35,10 +38,54 @@ const [caseData, setCaseData] = useState(null);
     loadCaseDetails();
   }, [caseId]);
 
+  // Socket.IO real-time messaging
+  useEffect(() => {
+    if (caseId && connected) {
+      // Join the case room
+      joinCaseRoom(caseId);
+      console.log(`📂 Joined case room: ${caseId}`);
+
+      // Listen for new messages
+      onNewMessage((message) => {
+        console.log('📨 Received new message:', message);
+        if (message.case_id === caseId) {
+          setMessages((prevMessages) => {
+            // Check if message already exists to avoid duplicates
+            const exists = prevMessages.some(m => 
+              m.content === message.content && 
+              m.sender_id === message.sender_id &&
+              new Date(m.created_at).getTime() === new Date(message.created_at).getTime()
+            );
+            if (!exists) {
+              return [...prevMessages, message];
+            }
+            return prevMessages;
+          });
+          
+          // Auto-scroll to bottom
+          setTimeout(() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+          }, 100);
+        }
+      });
+
+      // Cleanup
+      return () => {
+        leaveCaseRoom(caseId);
+        offNewMessage();
+      };
+    }
+  }, [caseId, connected, joinCaseRoom, leaveCaseRoom, onNewMessage, offNewMessage]);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
   const loadCaseDetails = async () => {
     try {
       const [caseRes, docsRes, hearingsRes, messagesRes] = await Promise.all([
-       caseAPI.getById(caseId),
+        caseAPI.getById(caseId),
         documentAPI.getByCaseId(caseId),
         hearingAPI.getByCaseId(caseId),
         messageAPI.getByCaseId(caseId)
@@ -73,6 +120,7 @@ const [caseData, setCaseData] = useState(null);
       const formData = new FormData();
       formData.append('file', file);
       formData.append('case_id', caseId);
+      formData.append('document_name', file.name);
       formData.append('document_type', 'evidence');
       formData.append('description', file.name);
 
@@ -91,15 +139,27 @@ const [caseData, setCaseData] = useState(null);
 
     setSending(true);
     try {
-      await messageAPI.send({
+      const response = await messageAPI.send({
         case_id: caseId,
         receiver_id: caseData.advocate_id || caseData.client_id,
         content: newMessage,
         message_type: 'text'
       });
       
+      // Real-time update will come through Socket.IO, but add optimistically
+      const optimisticMessage = {
+        id: response.data?.id || `temp-${Date.now()}`,
+        case_id: caseId,
+        sender_id: user.id,
+        content: newMessage,
+        created_at: new Date().toISOString(),
+        message_type: 'text',
+        is_read: false
+      };
+      
+      setMessages(prev => [...prev, optimisticMessage]);
       setNewMessage('');
-      await loadCaseDetails();
+      
     } catch (error) {
       console.error('Failed to send message:', error);
       alert('Failed to send message');
@@ -488,22 +548,22 @@ const [caseData, setCaseData] = useState(null);
           <TabsContent value="messages" className="mt-6">
             <Card>
               <CardHeader>
-                <CardTitle>Case Messages</CardTitle>
+                <CardTitle>Messages</CardTitle>
                 <CardDescription>Communicate with your advocate</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {/* Messages List */}
-                  <div className="max-h-96 overflow-y-auto space-y-3 border border-gray-200 rounded-lg p-4">
-                    {messages.length === 0 ? (
-                      <div className="text-center py-8">
-                        <MessageSquare className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                        <p className="text-gray-600">No messages yet</p>
-                      </div>
-                    ) : (
-                      messages.map((msg) => (
+                {/* Messages List */}
+                <div className="max-h-96 overflow-y-auto space-y-3 border border-gray-200 rounded-lg p-4">
+                  {messages.length === 0 ? (
+                    <div className="text-center py-8">
+                      <MessageSquare className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                      <p className="text-gray-600">No messages yet</p>
+                    </div>
+                  ) : (
+                    <>
+                      {messages.map((msg) => (
                         <div
-                          key={msg.id}
+                          key={msg.id || `${msg.sender_id}-${msg.created_at}`}
                           className={`flex ${msg.sender_id === user.id ? 'justify-end' : 'justify-start'}`}
                           data-testid={`message-${msg.id}`}
                         >
@@ -520,42 +580,43 @@ const [caseData, setCaseData] = useState(null);
                             </p>
                           </div>
                         </div>
-                      ))
-                    )}
-                  </div>
-
-                  {/* Send Message */}
-                  {caseData.advocate && (
-                    <div className="flex space-x-2">
-                      <Textarea
-                        placeholder="Type your message..."
-                        value={newMessage}
-                        onChange={(e) => setNewMessage(e.target.value)}
-                        rows={2}
-                        data-testid="message-input"
-                      />
-                      <Button
-                        onClick={handleSendMessage}
-                        disabled={sending || !newMessage.trim()}
-                        data-testid="send-message-button"
-                      >
-                        {sending ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Send className="w-4 h-4" />
-                        )}
-                      </Button>
-                    </div>
-                  )}
-
-                  {!caseData.advocate && (
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
-                      <p className="text-sm text-yellow-800">
-                        Hire an advocate to start messaging
-                      </p>
-                    </div>
+                      ))}
+                      <div ref={messagesEndRef} />
+                    </>
                   )}
                 </div>
+                
+                {/* Send Message */}
+                {caseData.advocate && (
+                  <div className="flex space-x-2 mt-4">
+                    <Textarea
+                      placeholder="Type your message..."
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      rows={2}
+                      data-testid="message-input"
+                    />
+                    <Button
+                      onClick={handleSendMessage}
+                      disabled={sending || !newMessage.trim()}
+                      data-testid="send-message-button"
+                    >
+                      {sending ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Send className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </div>
+                )}
+
+                {!caseData.advocate && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center mt-4">
+                    <p className="text-sm text-yellow-800">
+                      Hire an advocate to start messaging
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

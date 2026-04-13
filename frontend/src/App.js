@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { SocketProvider } from './contexts/SocketContext';
 import { Toaster } from './components/ui/toaster';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
@@ -65,6 +66,7 @@ const Home = () => {
 function App() {
   return (
     <AuthProvider>
+      <SocketProvider>
       <BrowserRouter>
         <Routes>
           {/* Public Routes */}
@@ -117,6 +119,7 @@ function App() {
         </Routes>
       </BrowserRouter>
       <Toaster />
+       </SocketProvider>
     </AuthProvider>
   );
 }

@@ -73,15 +73,24 @@ async def get_current_user(credentials = Depends(security)) -> dict:
         )
 
 
-def require_role(allowed_roles: List[str]):
+def require_role(allowed_roles: List):
     """
     Dependency to check if user has required role
+    Accepts both string roles and UserRole enums
     """
     async def role_checker(current_user: dict = Depends(get_current_user)) -> dict:
-        if current_user["role"] not in allowed_roles:
+        # Convert enums to strings if necessary
+        role_strings = []
+        for role in allowed_roles:
+            if hasattr(role, 'value'):
+                role_strings.append(role.value)
+            else:
+                role_strings.append(role)
+        
+        if current_user["role"] not in role_strings:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Insufficient permissions. Required roles: {', '.join(allowed_roles)}"
+                detail=f"Insufficient permissions. Required roles: {', '.join(role_strings)}"
             )
         return current_user
     
@@ -99,7 +108,7 @@ async def create_user_with_auth(email: str, password: str, full_name: str, phone
                 "email_confirm": True,  # Auto-confirm email for development
                 "user_metadata": {
                     "full_name": full_name,
-                    "role": role
+                    "role": role.value if hasattr(role, 'value') else role
                 }
             })
             
@@ -118,7 +127,7 @@ async def create_user_with_auth(email: str, password: str, full_name: str, phone
                 "options": {
                     "data": {
                         "full_name": full_name,
-                        "role": role
+                        "role": role.value if hasattr(role, 'value') else role
                     }
                 }
             })
@@ -137,7 +146,7 @@ async def create_user_with_auth(email: str, password: str, full_name: str, phone
             "email": email,
             "full_name": full_name,
             "phone": phone,
-            "role": role,
+            "role": role.value if hasattr(role, 'value') else role,  # Convert enum to string
             "is_active": True
         }
         

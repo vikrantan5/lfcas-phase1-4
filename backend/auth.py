@@ -86,30 +86,50 @@ def require_role(allowed_roles: List[str]):
         return current_user
     
     return role_checker
-
 async def create_user_with_auth(email: str, password: str, full_name: str, phone: Optional[str], role: str) -> dict:
     """
     Create a new user in Supabase Auth and our users table
     """
     try:
-        # Create user in Supabase Auth using Admin API (bypasses rate limits with service role key)
-        auth_response = supabase.auth.admin.create_user({
-            "email": email,
-            "password": password,
-            "email_confirm": True,  # Auto-confirm email for development
-            "user_metadata": {
-                "full_name": full_name,
-                "role": role
-            }
-        })
-        
-        if not auth_response.user:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to create auth user"
-            )
-        
-        auth_user = auth_response.user
+        # Try admin API first (preferred method)
+        try:
+            auth_response = supabase.auth.admin.create_user({
+                "email": email,
+                "password": password,
+                "email_confirm": True,  # Auto-confirm email for development
+                "user_metadata": {
+                    "full_name": full_name,
+                    "role": role
+                }
+            })
+            
+            if auth_response and auth_response.user:
+                auth_user = auth_response.user
+            else:
+                raise Exception("Admin API failed")
+                
+        except Exception as admin_error:
+            # Fallback: Use regular sign_up (requires email confirmation unless disabled)
+            print(f"Admin API failed, using sign_up fallback: {str(admin_error)}")
+            
+            auth_response = supabase.auth.sign_up({
+                "email": email,
+                "password": password,
+                "options": {
+                    "data": {
+                        "full_name": full_name,
+                        "role": role
+                    }
+                }
+            })
+            
+            if not auth_response or not auth_response.user:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Failed to create auth user"
+                )
+            
+            auth_user = auth_response.user
         
         # Create user profile in our users table
         user_data = {

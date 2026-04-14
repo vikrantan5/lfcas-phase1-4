@@ -1326,10 +1326,10 @@ async def get_platform_stats(
 ):
     """Get platform statistics"""
     total_users = supabase.table('users').select('*', count='exact').execute().count
-    total_clients = supabase.table('users').select('*', count='exact').eq('role', UserRole.CLIENT).execute().count
+    total_clients = supabase.table('users').select('*', count='exact').eq('role', 'client').execute().count
     total_advocates = supabase.table('advocates').select('*', count='exact').execute().count
-    approved_advocates = supabase.table('advocates').select('*', count='exact').eq('status', AdvocateStatus.APPROVED).execute().count
-    pending_advocates = supabase.table('advocates').select('*', count='exact').eq('status', AdvocateStatus.PENDING_APPROVAL).execute().count
+    approved_advocates = supabase.table('advocates').select('*', count='exact').eq('status', 'approved').execute().count
+    pending_advocates = supabase.table('advocates').select('*', count='exact').eq('status', 'pending_approval').execute().count
     
     total_cases = supabase.table('cases').select('*', count='exact').execute().count
     active_cases = supabase.table('cases').select('*', count='exact').neq('current_stage', 'CLOSED').execute().count
@@ -1345,7 +1345,7 @@ async def get_platform_stats(
     # Case distribution by type
     case_types = {}
     for case_type in CaseType:
-        count = supabase.table('cases').select('*', count='exact').eq('case_type', case_type).execute().count
+        count = supabase.table('cases').select('*', count='exact').eq('case_type', case_type.value).execute().count
         case_types[case_type.value] = count
     
     # Recent activity

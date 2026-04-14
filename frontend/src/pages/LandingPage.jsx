@@ -41,8 +41,9 @@ const LandingPage = () => {
   const heroImages = [
     "https://images.unsplash.com/photo-1589829545856-d10d557cf95f?q=80&w=2070", // Courtroom
     "https://images.unsplash.com/photo-1521791136064-7986c2920216?q=80&w=2070", // Advocate with client
-    "https://images.unsplash.com/photo-1589391884968-9d0e2c9e0f5f?q=80&w=2070", // Legal meeting
-    "https://images.unsplash.com/photo-1505664194779-8beaceb93744?q=80&w=2070", // Justice scale & books
+    "https://images.unsplash.com/photo-1505664194779-8beaceb93744?q=80&w=2070", // Law books & justice
+    "https://images.unsplash.com/photo-1618044733300-9472054094ee?q=80&w=2070", // Professional lawyer
+    "https://images.unsplash.com/photo-1706988056350-d112eabb6835?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTB8fGNvdXJ0cm9vbXxlbnwwfHwwfHx8MA%3D%3D", // Legal meeting
   ];
 
   useEffect(() => {

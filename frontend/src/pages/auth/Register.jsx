@@ -24,9 +24,26 @@ const Register = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
+  const [currentBg, setCurrentBg] = useState(0);
+
+  // Law & Advocate themed background images (consistent with Login & Landing)
+  const bgImages = [
+    "https://images.unsplash.com/photo-1589829545856-d10d557cf95f?q=80&w=2070", // Courtroom
+    "https://images.unsplash.com/photo-1521791136064-7986c2920216?q=80&w=2070", // Advocate with client
+    "https://images.unsplash.com/photo-1505664194779-8beaceb93744?q=80&w=2070", // Law books & justice
+    "https://images.unsplash.com/photo-1618044733300-9472054094ee?q=80&w=2070", // Professional lawyer
+    "https://images.unsplash.com/photo-1706988056350-d112eabb6835?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTB8fGNvdXJ0cm9vbXxlbnwwfHwwfHx8MA%3D%3D", // Legal meeting
+  ];
 
   useEffect(() => {
     setIsVisible(true);
+
+    // Background image slider - changes every 3 seconds
+    const interval = setInterval(() => {
+      setCurrentBg((prev) => (prev + 1) % bgImages.length);
+    }, 3000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const handleChange = (field, value) => {
@@ -52,16 +69,28 @@ const Register = () => {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 overflow-hidden flex items-center justify-center relative">
-      {/* Animated Background Gradients */}
-      <div className="absolute inset-0 bg-[radial-gradient(at_top_right,#3b82f6_0%,transparent_50%)] opacity-20" />
-      <div className="absolute inset-0 bg-[radial-gradient(at_bottom_left,#a855f7_0%,transparent_60%)] opacity-20" />
+    <div className="min-h-screen overflow-hidden flex items-center justify-center relative">
+      {/* Sliding Background Images */}
+      <div className="absolute inset-0 z-0">
+        {bgImages.map((img, index) => (
+          <div
+            key={index}
+            className={`absolute inset-0 bg-cover bg-center transition-opacity duration-1000 ease-in-out ${
+              index === currentBg ? 'opacity-100' : 'opacity-0'
+            }`}
+            style={{ backgroundImage: `url(${img})` }}
+          />
+        ))}
 
-      {/* Floating Decorative Elements */}
-      <div className="absolute top-32 left-16 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl animate-pulse" />
-      <div className="absolute bottom-40 right-24 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse delay-1000" />
+        {/* Strong Dark Overlay for Text Visibility */}
+        <div className="absolute inset-0 bg-black/75 z-10" />
+        
+        {/* Extra Gradient Overlay for Depth */}
+        <div className="absolute inset-0 bg-gradient-to-br from-black/50 via-transparent to-black/70 z-10" />
+      </div>
 
-      <div className={`relative z-10 w-full max-w-lg px-6 transition-all duration-700 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'}`}>
+      {/* Content Container */}
+      <div className={`relative z-20 w-full max-w-lg px-6 transition-all duration-700 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'}`}>
         
         {/* Logo & Header */}
         <div className="flex flex-col items-center mb-10">
@@ -72,30 +101,30 @@ const Register = () => {
             <div className="absolute inset-0 bg-blue-400/20 rounded-3xl blur-2xl -z-10 scale-125" />
           </div>
 
-          <h1 className="text-5xl font-bold tracking-tighter text-white">Join LFCAS</h1>
-          <p className="text-zinc-400 mt-2 text-center max-w-sm">
+          <h1 className="text-5xl font-bold tracking-tighter text-white drop-shadow-md">Join LFCAS</h1>
+          <p className="text-white/80 mt-2 text-center max-w-sm">
             Create your account and get AI-powered legal support
           </p>
         </div>
 
         {/* Register Card */}
-        <div className="bg-zinc-900/90 backdrop-blur-2xl border border-zinc-700/60 rounded-3xl p-10 shadow-2xl">
+        <div className="bg-zinc-900/95 backdrop-blur-2xl border border-white/10 rounded-3xl p-10 shadow-2xl">
           <form onSubmit={handleSubmit} className="space-y-7">
             {error && (
-              <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-5 py-3.5 rounded-2xl text-sm" data-testid="register-error">
+              <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-5 py-3.5 rounded-2xl text-sm">
                 {error}
               </div>
             )}
 
             {success && (
-              <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-5 py-3.5 rounded-2xl text-sm" data-testid="register-success">
+              <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-5 py-3.5 rounded-2xl text-sm">
                 Account created successfully! Redirecting to login...
               </div>
             )}
 
             {/* Full Name */}
             <div className="space-y-2">
-              <Label htmlFor="full_name" className="text-zinc-300 flex items-center gap-2">
+              <Label htmlFor="full_name" className="text-zinc-200 flex items-center gap-2">
                 <User className="w-4 h-4" /> Full Name
               </Label>
               <Input
@@ -105,14 +134,13 @@ const Register = () => {
                 value={formData.full_name}
                 onChange={(e) => handleChange('full_name', e.target.value)}
                 required
-                className="bg-zinc-950 border-zinc-700 h-14 text-lg focus:border-blue-500 transition-all"
-                data-testid="register-name-input"
+                className="bg-zinc-950/80 border-zinc-700 h-14 text-lg focus:border-blue-500 transition-all"
               />
             </div>
 
             {/* Email */}
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-zinc-300 flex items-center gap-2">
+              <Label htmlFor="email" className="text-zinc-200 flex items-center gap-2">
                 <Mail className="w-4 h-4" /> Email Address
               </Label>
               <Input
@@ -122,14 +150,13 @@ const Register = () => {
                 value={formData.email}
                 onChange={(e) => handleChange('email', e.target.value)}
                 required
-                className="bg-zinc-950 border-zinc-700 h-14 text-lg focus:border-blue-500 transition-all"
-                data-testid="register-email-input"
+                className="bg-zinc-950/80 border-zinc-700 h-14 text-lg focus:border-blue-500 transition-all"
               />
             </div>
 
             {/* Phone */}
             <div className="space-y-2">
-              <Label htmlFor="phone" className="text-zinc-300 flex items-center gap-2">
+              <Label htmlFor="phone" className="text-zinc-200 flex items-center gap-2">
                 <Phone className="w-4 h-4" /> Phone Number
               </Label>
               <Input
@@ -138,14 +165,13 @@ const Register = () => {
                 placeholder="+91 98765 43210"
                 value={formData.phone}
                 onChange={(e) => handleChange('phone', e.target.value)}
-                className="bg-zinc-950 border-zinc-700 h-14 text-lg focus:border-blue-500 transition-all"
-                data-testid="register-phone-input"
+                className="bg-zinc-950/80 border-zinc-700 h-14 text-lg focus:border-blue-500 transition-all"
               />
             </div>
 
             {/* Password */}
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-zinc-300">Password</Label>
+              <Label htmlFor="password" className="text-zinc-200">Password</Label>
               <div className="relative">
                 <Input
                   id="password"
@@ -155,8 +181,7 @@ const Register = () => {
                   onChange={(e) => handleChange('password', e.target.value)}
                   required
                   minLength={6}
-                  className="bg-zinc-950 border-zinc-700 h-14 text-lg pr-12 focus:border-blue-500 transition-all"
-                  data-testid="register-password-input"
+                  className="bg-zinc-950/80 border-zinc-700 h-14 text-lg pr-12 focus:border-blue-500 transition-all"
                 />
                 <button
                   type="button"
@@ -166,17 +191,17 @@ const Register = () => {
                   {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
               </div>
-              <p className="text-xs text-zinc-500">Minimum 6 characters</p>
+              <p className="text-xs text-zinc-400">Minimum 6 characters</p>
             </div>
 
             {/* Role Selection */}
             <div className="space-y-2">
-              <Label className="text-zinc-300">I am registering as a</Label>
+              <Label className="text-zinc-200">I am registering as a</Label>
               <Select value={formData.role} onValueChange={(value) => handleChange('role', value)}>
-                <SelectTrigger className="bg-zinc-950 border-zinc-700 h-14 text-lg focus:ring-blue-500">
+                <SelectTrigger className="bg-zinc-300/80 border-zinc-700 h-14 text-lg focus:ring-blue-500">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-zinc-900 border-zinc-700">
+                <SelectContent className="bg-zinc-300 border-zinc-700">
                   <SelectItem value="client" className="text-lg py-3">
                     Client – Seeking Legal Help
                   </SelectItem>
@@ -191,8 +216,7 @@ const Register = () => {
             <Button
               type="submit"
               disabled={loading || success}
-              className="w-full h-14 text-lg font-semibold bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 transition-all duration-300 rounded-2xl shadow-lg shadow-blue-500/30 mt-4"
-              data-testid="register-submit-button"
+              className="w-full h-14 text-lg font-semibold bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 transition-all duration-300 rounded-2xl shadow-xl shadow-blue-500/40 mt-4"
             >
               {loading ? (
                 <>
@@ -211,14 +235,13 @@ const Register = () => {
             <Link 
               to="/login" 
               className="text-blue-400 hover:text-blue-300 font-medium transition-colors"
-              data-testid="login-link"
             >
               Sign in here
             </Link>
           </div>
         </div>
 
-        <p className="text-center text-zinc-500 text-xs mt-8">
+        <p className="text-center text-white/60 text-xs mt-8 tracking-wide">
           Your data is secure • End-to-end encrypted platform
         </p>
       </div>

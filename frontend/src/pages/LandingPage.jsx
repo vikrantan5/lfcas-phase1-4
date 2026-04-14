@@ -1,214 +1,227 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { Scale, Shield, Users, MessageSquare, FileText, TrendingUp, CheckCircle, Clock, Award, ArrowRight, Briefcase, Calendar, UserCheck } from 'lucide-react';
+import { 
+  Scale, Shield, Users, MessageSquare, FileText, TrendingUp, 
+  CheckCircle, ArrowRight, Briefcase, Calendar, UserCheck, Award 
+} from 'lucide-react';
 
 const LandingPage = () => {
   const navigate = useNavigate();
+  const [scrolled, setScrolled] = useState(false);
+  const [showStats, setShowStats] = useState(false);
+
+  // Navbar scroll effect
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 50);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Animate stats on scroll
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) setShowStats(true);
+      },
+      { threshold: 0.5 }
+    );
+
+    const statsSection = document.getElementById('stats-section');
+    if (statsSection) observer.observe(statsSection);
+
+    return () => observer.disconnect();
+  }, []);
 
   const features = [
     {
-      icon: <Scale className="w-8 h-8 text-blue-600" />,
+      icon: <Scale className="w-10 h-10 text-blue-600" />,
       title: "AI-Powered Legal Analysis",
-      description: "Get instant AI-powered insights on your family law case with relevant legal sections and document requirements."
+      description: "Instant insights with relevant legal sections, precedents, and document checklists tailored to your case."
     },
     {
-      icon: <Users className="w-8 h-8 text-blue-600" />,
-      title: "Expert Advocate Matching",
-      description: "Connect with verified advocates specialized in family law based on your case type and location."
+      icon: <Users className="w-10 h-10 text-blue-600" />,
+      title: "Smart Advocate Matching",
+      description: "Get matched with top-rated family law advocates based on your case type, location & budget."
     },
     {
-      icon: <Calendar className="w-8 h-8 text-blue-600" />,
-      title: "Meeting Request System",
-      description: "Request consultations with advocates before committing to a case. Schedule meetings at your convenience."
+      icon: <Calendar className="w-10 h-10 text-blue-600" />,
+      title: "Seamless Meeting System",
+      description: "Request & schedule confidential consultations before committing to any advocate."
     },
     {
-      icon: <MessageSquare className="w-8 h-8 text-blue-600" />,
-      title: "Real-time Communication",
-      description: "Stay connected with your advocate through secure, real-time messaging throughout your case."
+      icon: <MessageSquare className="w-10 h-10 text-blue-600" />,
+      title: "Secure Real-time Chat",
+      description: "Communicate directly with your advocate through encrypted messaging."
     },
     {
-      icon: <FileText className="w-8 h-8 text-blue-600" />,
-      title: "Document Management",
-      description: "Securely upload and manage all case-related documents in one centralized location."
+      icon: <FileText className="w-10 h-10 text-blue-600" />,
+      title: "Smart Document Vault",
+      description: "Upload, organize, and securely share all your legal documents in one place."
     },
     {
-      icon: <TrendingUp className="w-8 h-8 text-blue-600" />,
-      title: "Case Progress Tracking",
-      description: "Monitor your case progress through every stage from initiation to judgment."
+      icon: <TrendingUp className="w-10 h-10 text-blue-600" />,
+      title: "Live Case Tracking",
+      description: "Track every stage of your case with real-time updates and milestone notifications."
     }
   ];
 
   const howItWorks = [
-    {
-      step: "1",
-      icon: <Scale className="w-6 h-6" />,
-      title: "Describe Your Issue",
-      description: "Share details about your family law matter and get AI-powered legal analysis."
-    },
-    {
-      step: "2",
-      icon: <UserCheck className="w-6 h-6" />,
-      title: "Choose an Advocate",
-      description: "Review recommended advocates and request a consultation meeting."
-    },
-    {
-      step: "3",
-      icon: <Calendar className="w-6 h-6" />,
-      title: "Meet & Discuss",
-      description: "Schedule and attend a meeting to discuss your case in detail."
-    },
-    {
-      step: "4",
-      icon: <Briefcase className="w-6 h-6" />,
-      title: "Start Your Case",
-      description: "Once the advocate accepts, your case officially begins with full support."
-    }
+    { step: "01", icon: <Scale className="w-8 h-8" />, title: "Describe Your Case", desc: "Tell us about your situation. Our AI analyzes it instantly." },
+    { step: "02", icon: <UserCheck className="w-8 h-8" />, title: "Get Matched", desc: "Receive personalized advocate recommendations." },
+    { step: "03", icon: <Calendar className="w-8 h-8" />, title: "Book a Meeting", desc: "Schedule a confidential consultation at your convenience." },
+    { step: "04", icon: <Briefcase className="w-8 h-8" />, title: "Begin Your Journey", desc: "Start your case with full professional support." }
   ];
 
-  const benefits = {
-    clients: [
-      "AI-powered case analysis and guidance",
-      "Access to verified family law advocates",
-      "Transparent meeting request process",
-      "Secure document storage and sharing",
-      "Real-time case progress updates",
-      "Direct communication with your advocate"
-    ],
-    advocates: [
-      "Qualified client leads with AI pre-screening",
-      "Meeting-first approach to case acceptance",
-      "Streamlined case management tools",
-      "Secure client communication platform",
-      "Professional profile and rating system",
-      "Automated hearing and deadline tracking"
-    ]
-  };
+  const stats = [
+    { number: "15k+", label: "Happy Clients" },
+    { number: "450+", label: "Verified Advocates" },
+    { number: "98%", label: "Success Rate" },
+    { number: "24/7", label: "AI Support" }
+  ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white" data-testid="landing-page">
-      {/* Header */}
-      <header className="bg-white shadow-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-3">
-              <div className="bg-blue-600 p-2 rounded-lg">
-                <Scale className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">LFCAS</h1>
-                <p className="text-xs text-gray-500">Legal Family Case Advisor</p>
-              </div>
+    <div className="min-h-screen overflow-x-hidden font-sans bg-zinc-950 text-white">
+      {/* Navbar */}
+      <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'bg-zinc-950/90 backdrop-blur-lg shadow-xl' : 'bg-transparent'}`}>
+        <div className="max-w-7xl mx-auto px-6 py-5 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="bg-gradient-to-br from-blue-600 to-indigo-600 p-3 rounded-2xl">
+              <Scale className="w-7 h-7 text-white" />
             </div>
-            <div className="flex items-center space-x-4">
-              <Button 
-                variant="ghost" 
-                onClick={() => navigate('/login')}
-                data-testid="header-login-button"
-              >
-                Login
-              </Button>
-              <Button 
-                onClick={() => navigate('/register')}
-                data-testid="header-register-button"
-              >
-                Get Started
-              </Button>
+            <div>
+              <h1 className="text-3xl font-bold tracking-tighter">LFCAS</h1>
+              <p className="text-[10px] text-zinc-500 -mt-1">LEGAL FAMILY CASE ADVISOR</p>
             </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <Button 
+              variant="ghost" 
+              className="text-white hover:bg-white/10"
+              onClick={() => navigate('/login')}
+            >
+              Login
+            </Button>
+            <Button 
+              className="bg-white text-zinc-900 hover:bg-white/90 font-semibold"
+              onClick={() => navigate('/register')}
+            >
+              Get Started Free
+            </Button>
           </div>
         </div>
       </header>
 
-      {/* Hero Section */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
-        <div className="text-center">
-          <div className="inline-flex items-center justify-center p-2 bg-blue-100 rounded-full mb-6">
-            <Shield className="w-5 h-5 text-blue-600 mr-2" />
-            <span className="text-sm font-medium text-blue-600">Trusted Legal Platform</span>
+      {/* Hero Section - Modern & Interactive */}
+      <section className="relative min-h-screen flex items-center justify-center pt-20 bg-[radial-gradient(at_top_right,#3b82f6_0%,#1e2937_50%,#0a0a0a_100%)] overflow-hidden">
+        {/* Animated Background Elements */}
+        <div className="absolute inset-0 opacity-30">
+          <div className="absolute top-20 left-20 w-96 h-96 bg-blue-500 rounded-full blur-[120px]" />
+          <div className="absolute bottom-20 right-20 w-96 h-96 bg-indigo-500 rounded-full blur-[120px]" />
+        </div>
+
+        <div className="max-w-5xl mx-auto px-6 text-center relative z-10">
+          <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-md px-6 py-2 rounded-full mb-8 border border-white/20">
+            <Shield className="w-5 h-5 text-blue-400" />
+            <span className="text-sm font-medium text-blue-300">India's Most Trusted Family Law Platform</span>
           </div>
-          
-          <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6" data-testid="hero-title">
-            Navigate Family Law
-            <br />
-            <span className="text-blue-600">With Confidence</span>
+
+          <h1 className="text-7xl md:text-[5.5rem] leading-none font-bold tracking-tighter mb-6 bg-gradient-to-br from-white via-blue-100 to-blue-300 bg-clip-text text-transparent">
+            Family Law,<br />
+            <span className="text-blue-400">Reimagined</span>
           </h1>
-          
-          <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto" data-testid="hero-description">
-            AI-powered legal guidance connecting you with expert family law advocates. 
-            From divorce to child custody, get the support you need through every step.
+
+          <p className="text-2xl text-zinc-400 max-w-3xl mx-auto mb-12">
+            AI-powered legal intelligence that connects you with the best family law advocates in India — securely, transparently, and confidently.
           </p>
-          
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button 
               size="lg" 
-              className="text-lg px-8 py-6"
+              className="text-lg px-10 py-7 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 transition-all duration-300 shadow-2xl shadow-blue-500/30"
               onClick={() => navigate('/register')}
-              data-testid="hero-cta-button"
             >
-              Start Your Case
-              <ArrowRight className="ml-2 w-5 h-5" />
+              Start Your Case Now
+              <ArrowRight className="ml-3 w-6 h-6" />
             </Button>
+
             <Button 
               size="lg" 
-              variant="outline"
-              className="text-lg px-8 py-6"
-              onClick={() => navigate('/login')}
+              variant="outline" 
+              className="text-lg px-10 py-7 rounded-2xl border-white/30 hover:bg-white/10"
+              onClick={() => document.getElementById('how-it-works').scrollIntoView({ behavior: 'smooth' })}
             >
-              Login to Dashboard
+              See How It Works
             </Button>
           </div>
 
-          {/* Trust Indicators */}
-          <div className="mt-12 flex flex-wrap items-center justify-center gap-8 text-sm text-gray-600">
-            <div className="flex items-center">
-              <CheckCircle className="w-5 h-5 text-green-600 mr-2" />
-              <span>AI-Powered Analysis</span>
+          {/* Trust Bar */}
+          <div className="mt-20 flex flex-wrap justify-center gap-10 text-sm text-zinc-400">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-emerald-400" /> AI Legal Analysis
             </div>
-            <div className="flex items-center">
-              <CheckCircle className="w-5 h-5 text-green-600 mr-2" />
-              <span>Verified Advocates</span>
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-emerald-400" /> Verified Advocates
             </div>
-            <div className="flex items-center">
-              <CheckCircle className="w-5 h-5 text-green-600 mr-2" />
-              <span>Secure & Confidential</span>
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-emerald-400" /> 100% Confidential
             </div>
+          </div>
+        </div>
+
+        {/* Scroll Indicator */}
+        <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 animate-bounce">
+          <div className="w-6 h-10 border-2 border-white/40 rounded-full flex justify-center pt-2">
+            <div className="w-1 h-2 bg-white/70 rounded-full animate-scroll" />
           </div>
         </div>
       </section>
 
+      {/* Stats Section */}
+      <section id="stats-section" className="py-20 bg-zinc-900 border-b border-zinc-800">
+        <div className="max-w-6xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-10">
+          {stats.map((stat, i) => (
+            <div key={i} className="text-center">
+              <div className="text-5xl font-bold text-blue-400 mb-2">
+                {showStats ? stat.number : '0'}
+              </div>
+              <p className="text-zinc-400 font-medium">{stat.label}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* How It Works */}
-      <section className="bg-white py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section id="how-it-works" className="py-24 bg-zinc-950">
+        <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-gray-900 mb-4">How It Works</h2>
-            <p className="text-xl text-gray-600">Simple steps to get the legal help you need</p>
+            <h2 className="text-5xl font-bold tracking-tighter mb-4">How LFCAS Works</h2>
+            <p className="text-xl text-zinc-400">Four simple steps to justice and peace of mind</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             {howItWorks.map((item, index) => (
-              <div key={index} className="relative">
-                <Card className="border-2 hover:border-blue-500 transition-all">
+              <div key={index} className="group relative">
+                <Card className="bg-zinc-900 border border-zinc-800 hover:border-blue-500/50 transition-all duration-500 h-full overflow-hidden group-hover:-translate-y-2">
                   <CardHeader>
-                    <div className="flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4 mx-auto">
-                      <div className="text-blue-600">
+                    <div className="flex justify-between items-start mb-8">
+                      <div className="text-6xl font-bold text-zinc-800 group-hover:text-blue-900/30 transition-colors">
+                        {item.step}
+                      </div>
+                      <div className="p-4 bg-zinc-800 rounded-2xl group-hover:bg-blue-950/50 transition-colors">
                         {item.icon}
                       </div>
                     </div>
-                    <div className="absolute top-4 left-4 w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
-                      <span className="text-white font-bold">{item.step}</span>
-                    </div>
-                    <CardTitle className="text-center text-lg">{item.title}</CardTitle>
+                    <CardTitle className="text-2xl mb-3">{item.title}</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-center text-gray-600">{item.description}</p>
+                    <p className="text-zinc-400 leading-relaxed">{item.desc}</p>
                   </CardContent>
                 </Card>
-                {index < howItWorks.length - 1 && (
-                  <div className="hidden md:block absolute top-1/2 -right-4 transform -translate-y-1/2">
-                    <ArrowRight className="w-8 h-8 text-blue-300" />
-                  </div>
-                )}
               </div>
             ))}
           </div>
@@ -216,158 +229,124 @@ const LandingPage = () => {
       </section>
 
       {/* Features Section */}
-      <section className="py-20 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="py-24 bg-gradient-to-b from-zinc-900 to-zinc-950">
+        <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-gray-900 mb-4">Comprehensive Features</h2>
-            <p className="text-xl text-gray-600">Everything you need to manage your family law case</p>
+            <h2 className="text-5xl font-bold tracking-tighter mb-4">Powerful Features</h2>
+            <p className="text-xl text-zinc-400">Built specifically for family law matters in India</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {features.map((feature, index) => (
-              <Card key={index} className="hover:shadow-lg transition-shadow" data-testid={`feature-card-${index}`}>
-                <CardHeader>
-                  <div className="mb-4">{feature.icon}</div>
-                  <CardTitle>{feature.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <CardDescription className="text-base">{feature.description}</CardDescription>
-                </CardContent>
+              <Card 
+                key={index} 
+                className="group bg-zinc-900 border border-zinc-800 hover:border-blue-600 hover:shadow-2xl hover:shadow-blue-500/10 transition-all duration-500 p-8"
+              >
+                <div className="mb-8 transition-transform group-hover:scale-110 duration-500">
+                  {feature.icon}
+                </div>
+                <CardTitle className="text-2xl mb-4 group-hover:text-blue-400 transition-colors">
+                  {feature.title}
+                </CardTitle>
+                <CardDescription className="text-zinc-400 text-lg leading-relaxed">
+                  {feature.description}
+                </CardDescription>
               </Card>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Benefits Section */}
-      <section className="py-20 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      {/* Benefits */}
+      <section className="py-24 bg-zinc-950">
+        <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-gray-900 mb-4">Benefits for Everyone</h2>
-            <p className="text-xl text-gray-600">Designed to serve both clients and advocates</p>
+            <h2 className="text-5xl font-bold tracking-tighter">Built for Both Sides</h2>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+          <div className="grid lg:grid-cols-2 gap-12">
             {/* For Clients */}
-            <Card className="border-2 border-blue-200">
-              <CardHeader className="bg-blue-50">
-                <div className="flex items-center space-x-3">
-                  <Users className="w-8 h-8 text-blue-600" />
-                  <CardTitle className="text-2xl">For Clients</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-6">
-                <ul className="space-y-4">
-                  {benefits.clients.map((benefit, index) => (
-                    <li key={index} className="flex items-start">
-                      <CheckCircle className="w-5 h-5 text-green-600 mr-3 mt-0.5 flex-shrink-0" />
-                      <span className="text-gray-700">{benefit}</span>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
+            <Card className="bg-gradient-to-br from-blue-950 to-zinc-900 border-blue-800 p-10">
+              <div className="flex items-center gap-4 mb-8">
+                <Users className="w-12 h-12 text-blue-400" />
+                <h3 className="text-4xl font-bold">For Clients</h3>
+              </div>
+              <ul className="space-y-6">
+                {[
+                  "Instant AI case evaluation in regional languages",
+                  "Access to top family law specialists near you",
+                  "Transparent pricing & meeting-first approach",
+                  "Secure document vault with e-sign support",
+                  "Real-time case status & hearing alerts"
+                ].map((item, i) => (
+                  <li key={i} className="flex gap-4">
+                    <CheckCircle className="w-6 h-6 text-emerald-400 mt-1 flex-shrink-0" />
+                    <span className="text-lg text-zinc-300">{item}</span>
+                  </li>
+                ))}
+              </ul>
             </Card>
 
             {/* For Advocates */}
-            <Card className="border-2 border-purple-200">
-              <CardHeader className="bg-purple-50">
-                <div className="flex items-center space-x-3">
-                  <Award className="w-8 h-8 text-purple-600" />
-                  <CardTitle className="text-2xl">For Advocates</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-6">
-                <ul className="space-y-4">
-                  {benefits.advocates.map((benefit, index) => (
-                    <li key={index} className="flex items-start">
-                      <CheckCircle className="w-5 h-5 text-green-600 mr-3 mt-0.5 flex-shrink-0" />
-                      <span className="text-gray-700">{benefit}</span>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
+            <Card className="bg-gradient-to-br from-purple-950 to-zinc-900 border-purple-800 p-10">
+              <div className="flex items-center gap-4 mb-8">
+                <Award className="w-12 h-12 text-purple-400" />
+                <h3 className="text-4xl font-bold">For Advocates</h3>
+              </div>
+              <ul className="space-y-6">
+                {[
+                  "High-quality pre-screened client leads",
+                  "Meeting-based case acceptance system",
+                  "Automated case & hearing management",
+                  "Professional profile with client ratings",
+                  "Secure payment & document handling"
+                ].map((item, i) => (
+                  <li key={i} className="flex gap-4">
+                    <CheckCircle className="w-6 h-6 text-emerald-400 mt-1 flex-shrink-0" />
+                    <span className="text-lg text-zinc-300">{item}</span>
+                  </li>
+                ))}
+              </ul>
             </Card>
           </div>
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="py-20 bg-gradient-to-r from-blue-600 to-blue-700">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-4xl font-bold text-white mb-6">
-            Ready to Get Started?
+      {/* Final CTA */}
+      <section className="py-28 bg-gradient-to-br from-blue-700 via-indigo-700 to-purple-800">
+        <div className="max-w-4xl mx-auto text-center px-6">
+          <h2 className="text-6xl font-bold tracking-tighter mb-6">
+            Ready to protect what matters most?
           </h2>
-          <p className="text-xl text-blue-100 mb-8">
-            Join thousands who trust LFCAS for their family law needs
+          <p className="text-2xl text-blue-100 mb-10">
+            Join thousands of families who found clarity and expert help through LFCAS.
           </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Button 
-              size="lg" 
-              variant="secondary"
-              className="text-lg px-8 py-6 bg-white text-blue-600 hover:bg-gray-100"
-              onClick={() => navigate('/register')}
-              data-testid="cta-register-button"
-            >
-              Create Free Account
-            </Button>
-            <Button 
-              size="lg" 
-              variant="outline"
-              className="text-lg px-8 py-6 text-white border-white hover:bg-blue-500"
-              onClick={() => navigate('/login')}
-            >
-              Login Now
-            </Button>
-          </div>
+
+          <Button 
+            size="lg" 
+            className="text-2xl px-16 py-8 rounded-3xl bg-white text-zinc-900 hover:bg-zinc-100 font-semibold shadow-2xl"
+            onClick={() => navigate('/register')}
+          >
+            Create Your Free Account
+          </Button>
+          <p className="mt-6 text-blue-200">Takes less than 60 seconds • No credit card required</p>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="bg-gray-900 text-gray-300 py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-            <div>
-              <div className="flex items-center space-x-3 mb-4">
-                <div className="bg-blue-600 p-2 rounded-lg">
-                  <Scale className="w-5 h-5 text-white" />
-                </div>
-                <span className="text-xl font-bold text-white">LFCAS</span>
+      <footer className="bg-black py-16 border-t border-zinc-900">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-8">
+            <div className="flex items-center gap-3">
+              <div className="bg-gradient-to-br from-blue-600 to-indigo-600 p-3 rounded-2xl">
+                <Scale className="w-7 h-7 text-white" />
               </div>
-              <p className="text-sm text-gray-400">
-                Empowering families with AI-driven legal guidance and expert advocate connections.
-              </p>
+              <span className="text-3xl font-bold tracking-tight">LFCAS</span>
             </div>
 
-            <div>
-              <h3 className="text-white font-semibold mb-4">Platform</h3>
-              <ul className="space-y-2 text-sm">
-                <li><a href="#" className="hover:text-white">How It Works</a></li>
-                <li><a href="#" className="hover:text-white">Features</a></li>
-                <li><a href="#" className="hover:text-white">Pricing</a></li>
-              </ul>
-            </div>
-
-            <div>
-              <h3 className="text-white font-semibold mb-4">Legal</h3>
-              <ul className="space-y-2 text-sm">
-                <li><a href="#" className="hover:text-white">Privacy Policy</a></li>
-                <li><a href="#" className="hover:text-white">Terms of Service</a></li>
-                <li><a href="#" className="hover:text-white">Disclaimer</a></li>
-              </ul>
-            </div>
-
-            <div>
-              <h3 className="text-white font-semibold mb-4">Support</h3>
-              <ul className="space-y-2 text-sm">
-                <li><a href="#" className="hover:text-white">Help Center</a></li>
-                <li><a href="#" className="hover:text-white">Contact Us</a></li>
-                <li><a href="#" className="hover:text-white">FAQ</a></li>
-              </ul>
-            </div>
-          </div>
-
-          <div className="border-t border-gray-800 mt-12 pt-8 text-center text-sm text-gray-400">
-            <p>&copy; 2025 LFCAS - Legal Family Case Advisor System. All rights reserved.</p>
+            <p className="text-zinc-500 text-sm">
+              © 2026 LFCAS - Legal Family Case Advisor System. All Rights Reserved.
+            </p>
           </div>
         </div>
       </footer>

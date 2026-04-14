@@ -98,47 +98,73 @@ def require_role(allowed_roles: List):
 async def create_user_with_auth(email: str, password: str, full_name: str, phone: Optional[str], role: str) -> dict:
     """
     Create a new user in Supabase Auth and our users table
+    Uses admin API to bypass rate limits, with intelligent fallback
     """
     try:
-        # Try admin API first (preferred method)
+        # Convert enum to string if needed
+        role_str = role.value if hasattr(role, 'value') else str(role)
+        
+        auth_user = None
+        admin_api_failed = False
+        
+        # Try admin API first (bypasses rate limits if enabled in Supabase)
         try:
             auth_response = supabase.auth.admin.create_user({
                 "email": email,
                 "password": password,
-                "email_confirm": True,  # Auto-confirm email for development
+                "email_confirm": True,  # Auto-confirm email
                 "user_metadata": {
                     "full_name": full_name,
-                    "role": role.value if hasattr(role, 'value') else role
+                    "role": role_str
                 }
             })
             
             if auth_response and auth_response.user:
                 auth_user = auth_response.user
-            else:
-                raise Exception("Admin API failed")
-                
+                print(f"✅ User created via admin API: {email}")
         except Exception as admin_error:
-            # Fallback: Use regular sign_up (requires email confirmation unless disabled)
-            print(f"Admin API failed, using sign_up fallback: {str(admin_error)}")
+            admin_api_failed = True
+            error_str = str(admin_error).lower()
             
-            auth_response = supabase.auth.sign_up({
-                "email": email,
-                "password": password,
-                "options": {
-                    "data": {
-                        "full_name": full_name,
-                        "role": role.value if hasattr(role, 'value') else role
-                    }
-                }
-            })
-            
-            if not auth_response or not auth_response.user:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Failed to create auth user"
-                )
-            
-            auth_user = auth_response.user
+            # Check if it's a permissions issue (not rate limit)
+            if "user not allowed" in error_str or "permission" in error_str or "forbidden" in error_str:
+                print(f"⚠️  Admin API not available (permissions), using regular signup for: {email}")
+                # Fallback to regular sign_up with auto-confirm
+                # Note: This may hit rate limits, but Supabase typically allows a reasonable number
+                try:
+                    auth_response = supabase.auth.sign_up({
+                        "email": email,
+                        "password": password,
+                        "options": {
+                            "email_redirect_to": None,  # No redirect needed
+                            "data": {
+                                "full_name": full_name,
+                                "role": role_str,
+                                "email_confirmed": True  # Request auto-confirmation
+                            }
+                        }
+                    })
+                    
+                    if auth_response and auth_response.user:
+                        auth_user = auth_response.user
+                        print(f"✅ User created via sign_up: {email}")
+                except Exception as signup_error:
+                    signup_error_str = str(signup_error).lower()
+                    if "rate limit" in signup_error_str or "429" in signup_error_str:
+                        raise HTTPException(
+                            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                            detail="Registration temporarily unavailable due to rate limiting. Please contact support to enable admin API or try again later."
+                        )
+                    raise signup_error
+            else:
+                # Other admin API error
+                raise admin_error
+        
+        if not auth_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to create auth user"
+            )
         
         # Create user profile in our users table
         user_data = {
@@ -146,7 +172,7 @@ async def create_user_with_auth(email: str, password: str, full_name: str, phone
             "email": email,
             "full_name": full_name,
             "phone": phone,
-            "role": role.value if hasattr(role, 'value') else role,  # Convert enum to string
+            "role": role_str,  # Use string value, not enum
             "is_active": True
         }
         
@@ -166,12 +192,19 @@ async def create_user_with_auth(email: str, password: str, full_name: str, phone
     except HTTPException:
         raise
     except Exception as e:
+        # Provide more detailed error message
+        error_msg = str(e)
+        if "rate limit" in error_msg.lower() or "429" in error_msg.lower():
+            error_msg = "Too many registration attempts. Please contact administrator to enable Supabase admin API or try again in a few minutes."
+        elif "already registered" in error_msg.lower() or "already exists" in error_msg.lower() or "duplicate" in error_msg.lower():
+            error_msg = "Email already registered"
+        elif "user not allowed" in error_msg.lower():
+            error_msg = "Registration is currently restricted. Please contact administrator."
+        
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Registration failed: {str(e)}"
+            detail=error_msg
         )
-
-
 async def login_user(email: str, password: str) -> dict:
     """
     Login user with Supabase Auth

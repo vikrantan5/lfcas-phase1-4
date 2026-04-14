@@ -112,6 +112,13 @@ const AdvocateDashboard = () => {
     }
   };
 
+
+  
+ // Generate Jitsi meeting link
+  const generateJitsiLink = (meetingRequestId) => {
+    const roomName = `LFCAS-Meeting-${meetingRequestId.slice(0, 8)}`;
+    return `https://meet.jit.si/${roomName}`;
+  };
   const loadCases = async () => {
     try {
       const response = await caseAPI.list();
@@ -707,7 +714,21 @@ const AdvocateDashboard = () => {
                       </div>
 
                       {meeting.meeting_link && (
-                        <p className="text-sm text-gray-600">Link: {meeting.meeting_link}</p>
+                           <div className="space-y-2">
+                          <p className="text-sm text-gray-600">
+                            <span className="font-medium">Meeting Link:</span> {meeting.meeting_link}
+                          </p>
+                          <Button 
+                            onClick={() => window.open(meeting.meeting_link, '_blank')}
+                            className="bg-green-600 hover:bg-green-700"
+                            size="sm"
+                          >
+                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                            Join Meeting
+                          </Button>
+                        </div>
                       )}
 
                       {meeting.meeting_location && (
@@ -911,12 +932,27 @@ const AdvocateDashboard = () => {
 
             {meetingData.meeting_mode === 'online' && (
               <div>
-                <Label>Meeting Link (Google Meet, Zoom, etc.)</Label>
-                <Input
-                  value={meetingData.meeting_link}
-                  onChange={(e) => setMeetingData({...meetingData, meeting_link: e.target.value})}
-                  placeholder="https://meet.google.com/..."
-                />
+                <Label>Meeting Link (Jitsi Meet - No login required)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={meetingData.meeting_link}
+                    onChange={(e) => setMeetingData({...meetingData, meeting_link: e.target.value})}
+                    placeholder="https://meet.jit.si/..."
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      const link = generateJitsiLink(schedulingMeeting.id);
+                      setMeetingData({...meetingData, meeting_link: link});
+                    }}
+                  >
+                    Generate Link
+                  </Button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Click "Generate Link" to create a free Jitsi meeting room
+                </p>
               </div>
             )}
 

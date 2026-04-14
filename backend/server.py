@@ -1394,9 +1394,47 @@ async def get_admin_logs(
 # ============= SOCKET.IO EVENTS =============
 @sio.event
 async def connect(sid, environ):
-    """Socket.IO connection event"""
-    logger.info(f"Client connected: {sid}")
-    await sio.emit('connected', {'data': 'Connected to LFCAS server'}, room=sid)
+    """Socket.IO connection event with authentication"""
+    try:
+        # Extract token from query params or headers
+        token = None
+        
+        # Try to get from query string
+        query_string = environ.get('QUERY_STRING', '')
+        if 'token=' in query_string:
+            for param in query_string.split('&'):
+                if param.startswith('token='):
+                    token = param.split('=')[1]
+                    break
+        
+        # Try to get from headers
+        if not token:
+            auth_header = environ.get('HTTP_AUTHORIZATION', '')
+            if auth_header.startswith('Bearer '):
+                token = auth_header[7:]
+        
+        # If no token, reject connection
+        if not token:
+            logger.warning(f"Socket connection rejected - no token: {sid}")
+            return False
+        
+        # Verify token with Supabase
+        try:
+            user_response = supabase.auth.get_user(token)
+            if user_response and user_response.user:
+                logger.info(f"Socket authenticated: {sid} - User: {user_response.user.id}")
+                await sio.emit('connected', {'data': 'Connected to LFCAS server'}, room=sid)
+                return True
+            else:
+                logger.warning(f"Socket connection rejected - invalid token: {sid}")
+                return False
+        except Exception as auth_error:
+            logger.error(f"Socket auth error: {auth_error}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Socket connection error: {e}")
+        return False
 
 
 @sio.event

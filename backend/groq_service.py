@@ -165,29 +165,75 @@ async def analyze_case_with_groq(case_type: CaseType, description: str, addition
         # Extract the response
         response_content = chat_completion.choices[0].message.content
         
-        # Parse JSON response
+        # Parse JSON response with improved error handling
+        ai_response = None
         try:
             # Try to extract JSON if it's wrapped in markdown code blocks
-            if "```json" in response_content:
-                json_start = response_content.find("```json") + 7
-                json_end = response_content.find("```", json_start)
-                response_content = response_content[json_start:json_end].strip()
-            elif "```" in response_content:
-                json_start = response_content.find("```") + 3
-                json_end = response_content.find("```", json_start)
-                response_content = response_content[json_start:json_end].strip()
+            cleaned_content = response_content.strip()
             
-            ai_response = json.loads(response_content)
-        except json.JSONDecodeError:
-            # If JSON parsing fails, create a structured response
+            if "```json" in cleaned_content:
+                json_start = cleaned_content.find("```json") + 7
+                json_end = cleaned_content.find("```", json_start)
+                cleaned_content = cleaned_content[json_start:json_end].strip()
+            elif "```" in cleaned_content:
+                json_start = cleaned_content.find("```") + 3
+                json_end = cleaned_content.find("```", json_start)
+                cleaned_content = cleaned_content[json_start:json_end].strip()
+            
+            # Try to parse JSON
+            ai_response = json.loads(cleaned_content)
+            
+            # Validate required fields
+            required_fields = ["case_classification", "legal_sections", "required_documents"]
+            for field in required_fields:
+                if field not in ai_response:
+                    print(f"Warning: Missing field {field} in AI response")
+                    ai_response[field] = []
+            
+            # Ensure arrays are arrays
+            if isinstance(ai_response.get("legal_sections"), str):
+                ai_response["legal_sections"] = [ai_response["legal_sections"]]
+            if isinstance(ai_response.get("required_documents"), str):
+                ai_response["required_documents"] = [ai_response["required_documents"]]
+            if isinstance(ai_response.get("recommended_actions"), str):
+                ai_response["recommended_actions"] = [ai_response["recommended_actions"]]
+            
+        except (json.JSONDecodeError, ValueError, TypeError) as e:
+            print(f"AI Response Parsing Error: {e}")
+            print(f"Raw response: {response_content[:500]}")
+            
+            # Create a structured fallback response
             ai_response = {
                 "case_classification": case_type.value,
-                "legal_sections": ["Unable to parse - please consult with an advocate"],
-                "required_documents": ["Standard documents for " + case_type.value],
-                "procedural_guidance": response_content,
-                "recommended_actions": ["Consult with a qualified advocate"],
-                "estimated_timeline": "Varies by case complexity",
-                "important_notes": ["AI response needs manual review"]
+                "legal_sections": [
+                    "Section 13 of Hindu Marriage Act, 1955 (for Divorce)" if case_type.value == "divorce" else
+                    "Section 125 of CrPC (for Alimony)" if case_type.value == "alimony" else
+                    "Guardians and Wards Act, 1890" if case_type.value == "child_custody" else
+                    "Dowry Prohibition Act, 1961" if case_type.value == "dowry" else
+                    "Protection of Women from Domestic Violence Act, 2005" if case_type.value == "domestic_violence" else
+                    "Relevant family law provisions"
+                ],
+                "required_documents": [
+                    "Identity proof (Aadhar, PAN)",
+                    "Address proof",
+                    "Marriage certificate (if applicable)",
+                    "Income proof",
+                    "Evidence supporting your case",
+                    "Witness statements (if any)"
+                ],
+                "procedural_guidance": "Please consult with a qualified advocate for specific guidance on your case. An advocate will help you understand the legal process and prepare necessary documentation.",
+                "recommended_actions": [
+                    "Document all relevant evidence",
+                    "Consult with a qualified family law advocate",
+                    "Prepare required documents listed above",
+                    "Maintain records of all communications"
+                ],
+                "estimated_timeline": "6-18 months (varies by case complexity and court schedule)",
+                "important_notes": [
+                    "This is an automated analysis and should not replace professional legal advice",
+                    "Please consult with an advocate for personalized guidance",
+                    "Timeline may vary based on case specifics and court availability"
+                ]
             }
         
         return {

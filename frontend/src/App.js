@@ -9,6 +9,7 @@ import Register from './pages/auth/Register';
 import ClientDashboard from './pages/client/ClientDashboard';
 import CaseDetailPage from './pages/client/CaseDetail';
 import AdvocateDashboard from './pages/advocate/AdvocateDashboard';
+import AdvocateCaseDetail from './pages/advocate/AdvocateCaseDetail';
 import ManagerDashboard from './pages/manager/ManagerDashboard';
 import { Loader2 } from 'lucide-react';
 import './App.css';
@@ -103,6 +104,15 @@ function App() {
               </ProtectedRoute>
             }
           />
+             <Route
+            path="/advocate/cases/:caseId"
+            element={
+              <ProtectedRoute allowedRoles={['advocate']}>
+                <AdvocateCaseDetail />
+              </ProtectedRoute>
+            }
+          />
+
 
           {/* Manager Routes */}
           <Route

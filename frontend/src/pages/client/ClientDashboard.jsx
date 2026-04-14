@@ -13,6 +13,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Scale, Plus, FileText, Users, Bell, MessageSquare, Loader2, Briefcase, Clock, CheckCircle, Calendar, AlertCircle, UserCheck, X, Star, TrendingUp, Activity, ArrowRight, Menu, ChevronRight, Zap, Shield, Award, Sparkles, Moon, Sun } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../hooks/use-toast';
+import NotificationPanel from '../../components/NotificationPanel';
+import RatingDialog from '../../components/RatingDialog';
 
 const ClientDashboard = () => {
   const { user, logout } = useAuth();
@@ -40,6 +42,11 @@ const ClientDashboard = () => {
   const [showMeetingRequest, setShowMeetingRequest] = useState(false);
   const [selectedAdvocate, setSelectedAdvocate] = useState(null);
   const [requestingMeeting, setRequestingMeeting] = useState(false);
+
+
+    // Rating Dialog State
+  const [showRatingDialog, setShowRatingDialog] = useState(false);
+  const [selectedCaseForRating, setSelectedCaseForRating] = useState(null);
 
   useEffect(() => {
     loadAllData();
@@ -115,6 +122,15 @@ const ClientDashboard = () => {
   const handleRequestMeeting = async (advocate) => {
     setSelectedAdvocate(advocate);
     setShowMeetingRequest(true);
+  };
+
+    const handleOpenRatingDialog = (caseItem) => {
+    setSelectedCaseForRating(caseItem);
+    setShowRatingDialog(true);
+  };
+
+  const handleRatingSuccess = () => {
+    loadCases(); // Reload cases after rating
   };
 
   const submitMeetingRequest = async () => {
@@ -223,12 +239,9 @@ const ClientDashboard = () => {
                 {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
               </Button>
               
-              <Button variant="ghost" size="sm" className={`relative ${darkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`}>
-                <Bell className="w-5 h-5" />
-                <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>
-              </Button>
+               <NotificationPanel darkMode={darkMode} />
               
-              <div className="flex items-center space-x-3">
+               <div className="flex items-center space-x-3">{/* Bell notification replaced with NotificationPanel */}
                 <div className={`text-right ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                   <p className="text-sm font-medium">{user?.full_name}</p>
                   <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{user?.email}</p>
@@ -527,14 +540,16 @@ const ClientDashboard = () => {
               cases.map((caseItem, index) => (
                 <div 
                   key={caseItem.id} 
-                  onClick={() => navigate(`/client/cases/${caseItem.id}`)}
-                  className={`group relative overflow-hidden rounded-2xl ${darkMode ? 'bg-gray-800/50 hover:bg-gray-800/70' : 'bg-white hover:shadow-xl'} backdrop-blur-sm border ${darkMode ? 'border-gray-700' : 'border-gray-200'} transition-all duration-300 hover:scale-[1.02] cursor-pointer`}
+                  className={`group relative overflow-hidden rounded-2xl ${darkMode ? 'bg-gray-800/50 hover:bg-gray-800/70' : 'bg-white hover:shadow-xl'} backdrop-blur-sm border ${darkMode ? 'border-gray-700' : 'border-gray-200'} transition-all duration-300 hover:scale-[1.02]`}
                   style={{ animationDelay: `${index * 100}ms` }}
                 >
                   <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-purple-600/10 to-pink-600/10 rounded-full blur-2xl"></div>
                   <div className="relative p-6">
                     <div className="flex items-start justify-between flex-wrap gap-4">
-                      <div className="flex-1">
+                      <div 
+                        className="flex-1 cursor-pointer" 
+                        onClick={() => navigate(`/client/cases/${caseItem.id}`)}
+                      >
                         <div className="flex items-center gap-2 mb-2">
                           <Badge className="bg-gradient-to-r from-purple-600 to-pink-600 text-white border-0">
                             {formatCaseType(caseItem.case_type)}
@@ -560,7 +575,26 @@ const ClientDashboard = () => {
                           </div>
                         </div>
                       </div>
-                      <ChevronRight className="w-5 h-5 text-gray-400 group-hover:translate-x-1 transition-transform duration-300" />
+                      <div className="flex flex-col gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => navigate(`/client/cases/${caseItem.id}`)}
+                        >
+                          <ChevronRight className="w-5 h-5" />
+                        </Button>
+                        {caseItem.current_stage === 'CLOSED' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenRatingDialog(caseItem)}
+                            className={darkMode ? 'border-yellow-500 text-yellow-400 hover:bg-yellow-500/10' : ''}
+                          >
+                            <Star className="w-4 h-4 mr-1" />
+                            Rate
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -785,6 +819,16 @@ const ClientDashboard = () => {
         </DialogContent>
       </Dialog>
 
+
+                 {/* Rating Dialog */}
+      {selectedCaseForRating && (
+        <RatingDialog
+          open={showRatingDialog}
+          onOpenChange={setShowRatingDialog}
+          caseData={selectedCaseForRating}
+          onSuccess={handleRatingSuccess}
+        />
+      )}
       <style jsx>{`
         @keyframes fadeInUp {
           from {

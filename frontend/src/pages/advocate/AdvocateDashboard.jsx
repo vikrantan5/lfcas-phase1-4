@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Scale, Briefcase, Clock, Star, Bell, Loader2, Calendar, FileText, User, UserCheck, X, Check, AlertCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../hooks/use-toast';
+import NotificationPanel from '../../components/NotificationPanel';
 
 const AdvocateDashboard = () => {
   const { user, logout } = useAuth();
@@ -487,9 +488,7 @@ const AdvocateDashboard = () => {
                   {profile.status}
                 </Badge>
               )}
-              <Button variant="ghost" size="sm">
-                <Bell className="w-5 h-5" />
-              </Button>
+              <NotificationPanel darkMode={false} />
               <div className="flex items-center space-x-3">
                 <div className="text-right">
                   <p className="text-sm font-medium text-gray-900">{user?.full_name}</p>
@@ -772,7 +771,7 @@ const AdvocateDashboard = () => {
                 <Card 
                   key={caseItem.id} 
                   className="hover:shadow-md transition-shadow cursor-pointer"
-                  onClick={() => navigate(`/cases/${caseItem.id}`)}
+                    onClick={() => navigate(`/advocate/cases/${caseItem.id}`)}
                 >
                   <CardHeader>
                     <div className="flex items-start justify-between">

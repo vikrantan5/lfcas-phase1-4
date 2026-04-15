@@ -1507,38 +1507,75 @@ async def process_voice_conversation(
 ):
     """Process voice conversation with Groq AI and create case analysis"""
     try:
+        logger.info(f"Processing conversation for session: {request.session_id}")
+        
         # Verify session
         session = supabase.table('voice_sessions').select('*').eq('id', request.session_id).eq('user_id', current_user["user_id"]).execute()
         
         if not session.data or len(session.data) == 0:
+            logger.error(f"Session not found: {request.session_id}")
             raise HTTPException(status_code=404, detail="Session not found")
+        
+        # Validate transcript
+        if not request.transcript or len(request.transcript.strip()) < 20:
+            logger.error("Transcript too short or empty")
+            raise HTTPException(
+                status_code=400, 
+                detail="Please provide a detailed description of your legal problem. The conversation is too short."
+            )
         
         vapi_service = get_vapi_service()
         
-        # Extract case info from transcript
+        # Extract case info from transcript with validation
         case_info = vapi_service.extract_case_info_from_transcript(
             request.transcript,
             request.language
         )
         
+        logger.info(f"Case info extracted: {case_info.get('case_type')}, is_legal: {case_info.get('is_legal')}")
+        
+        # Validate if conversation is about legal matters
+        if not case_info.get("is_legal", True):
+            logger.warning(f"Non-legal conversation detected: {case_info.get('validation_reason')}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"⚠️ {case_info.get('validation_reason')} This is a legal advisory system. Please describe your family law issue (divorce, custody, alimony, etc.)"
+            )
+        
         # Determine case type
         case_type_str = case_info.get("case_type", "other")
+        if not case_type_str or case_type_str == "other":
+            logger.warning("Could not determine specific case type")
+        
         try:
             case_type = CaseType(case_type_str)
         except ValueError:
+            logger.warning(f"Invalid case type: {case_type_str}, defaulting to OTHER")
             case_type = CaseType.OTHER
         
+        
         # Analyze with Groq
+        logger.info(f"Calling Groq AI for analysis, case_type: {case_type}")
         ai_result = await analyze_case_with_groq(
             case_type=case_type,
             description=request.transcript,
             additional_details=case_info.get("additional_details", {})
         )
         
-        if not ai_result["success"]:
-            raise HTTPException(status_code=500, detail="AI analysis failed")
+        if not ai_result.get("success"):
+            error_msg = ai_result.get("error", "Unknown error")
+            logger.error(f"AI analysis failed: {error_msg}")
+            raise HTTPException(
+                status_code=500, 
+                detail=f"AI analysis failed: {error_msg}. Please try again or consult an advocate directly."
+            )
         
-        ai_data = ai_result["data"]
+        ai_data = ai_result.get("data", {})
+        if not ai_data:
+            logger.error("AI returned empty data")
+            raise HTTPException(status_code=500, detail="AI analysis returned no data")
+        
+        logger.info(f"AI analysis successful, tokens used: {ai_result.get('tokens_used')}")
         
         # Create AI case analysis record
         analysis = {
@@ -1557,12 +1594,15 @@ async def process_voice_conversation(
             "groq_tokens_used": ai_result.get("tokens_used")
         }
         
+        logger.info("Saving AI case analysis to database")
         analysis_result = supabase.table('ai_case_analysis').insert(analysis).execute()
         
         if not analysis_result.data or len(analysis_result.data) == 0:
-            raise HTTPException(status_code=500, detail="Failed to save analysis")
+            logger.error("Failed to save AI analysis to database")
+            raise HTTPException(status_code=500, detail="Failed to save analysis to database")
         
         analysis_id = analysis_result.data[0]['id']
+        logger.info(f"AI analysis saved with ID: {analysis_id}")
         
         # Update session
         supabase.table('voice_sessions').update({

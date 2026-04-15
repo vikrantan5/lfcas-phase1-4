@@ -22,7 +22,11 @@ def get_groq_client():
         api_key = os.environ.get("GROQ_API_KEY")
         if not api_key:
             raise ValueError("GROQ_API_KEY not found in environment")
-        _groq_client = Groq(api_key=api_key)
+        # Initialize without proxies parameter
+        _groq_client = Groq(
+            api_key=api_key,
+            max_retries=2
+        )
     return _groq_client
 
 # Prompt templates for different case types

@@ -198,11 +198,66 @@ class VapiService:
                     "error": str(e)
                 }
     
+    def validate_legal_conversation(self, transcript: str, language: str = "english") -> Dict:
+        """
+        Validate if the conversation is about a legal problem.
+        Returns: {"is_legal": bool, "reason": str}
+        """
+        if not transcript or len(transcript.strip()) < 20:
+            return {
+                "is_legal": False,
+                "reason": "Conversation is too short. Please describe your legal problem in detail."
+            }
+        
+        transcript_lower = transcript.lower()
+        
+        # Legal keywords in multiple languages
+        legal_keywords = {
+            "english": ["divorce", "custody", "alimony", "maintenance", "lawyer", "advocate", "court", "legal", 
+                       "case", "marriage", "violence", "harassment", "dowry", "property", "rights", "law", 
+                       "petition", "file", "judgment", "hearing"],
+            "hindi": ["तलाक", "गुजारा", "बच्चे", "हिरासत", "वकील", "अदालत", "कानूनी", "मामला", "शादी", 
+                     "हिंसा", "उत्पीड़न", "दहेज", "संपत्ति", "अधिकार", "कानून"],
+            "bengali": ["ডিভোর্স", "ভরণপোষণ", "সন্তান", "হেফাজত", "আইনজীবী", "আদালত", "আইনি", "মামলা", 
+                       "বিবাহ", "সহিংসতা", "হয়রানি", "যৌতুক", "সম্পত্তি", "অধিকার", "আইন"]
+        }
+        
+        # Get keywords for the language
+        keywords = legal_keywords.get(language, legal_keywords["english"])
+        
+        # Check if transcript contains legal keywords
+        legal_keyword_count = sum(1 for keyword in keywords if keyword in transcript_lower)
+        
+        if legal_keyword_count < 2:
+            return {
+                "is_legal": False,
+                "reason": "This doesn't appear to be a legal problem. Please describe your family law issue clearly."
+            }
+        
+        # Check for non-legal/spam content
+        spam_indicators = ["hello", "hi", "test", "testing", "xyz", "abc", "nothing", "joke", "fun", "random"]
+        spam_count = sum(1 for indicator in spam_indicators if indicator in transcript_lower)
+        
+        if spam_count > legal_keyword_count and len(transcript.split()) < 30:
+            return {
+                "is_legal": False,
+                "reason": "Please provide a meaningful description of your legal problem. Avoid test or random messages."
+            }
+        
+        return {
+            "is_legal": True,
+            "reason": "Valid legal conversation"
+        }
+    
     def extract_case_info_from_transcript(self, transcript: str, language: str = "english") -> Dict:
         """Extract structured case information from conversation transcript"""
         
-        # This is a simple extraction - in production, you'd use NLP/LLM
+        # First validate if it's a legal conversation
+        validation = self.validate_legal_conversation(transcript, language)
+        
         case_info = {
+            "is_legal": validation["is_legal"],
+            "validation_reason": validation["reason"],
             "case_type": None,
             "location": None,
             "description": transcript,
@@ -211,33 +266,47 @@ class VapiService:
             "additional_details": {}
         }
         
+        if not validation["is_legal"]:
+            return case_info
+        
         # Simple keyword matching (enhance with NLP in production)
         transcript_lower = transcript.lower()
         
         # Detect case type
-        if any(word in transcript_lower for word in ["divorce", "talaq", "तलाक", "ডিভোর্স"]):
+        if any(word in transcript_lower for word in ["divorce", "talaq", "तलाक", "ডিভোর্স", "separation", "विवाह विच्छेद"]):
             case_info["case_type"] = "divorce"
-        elif any(word in transcript_lower for word in ["alimony", "maintenance", "गुजारा", "ভরণপোষণ"]):
+        elif any(word in transcript_lower for word in ["alimony", "maintenance", "गुजारा", "ভরণপোষণ", "support", "भरण-पोषण"]):
             case_info["case_type"] = "alimony"
-        elif any(word in transcript_lower for word in ["custody", "child", "बच्चे", "সন্তান"]):
+        elif any(word in transcript_lower for word in ["custody", "child", "बच्चे", "সন্তান", "guardianship", "अभिभावक"]):
             case_info["case_type"] = "child_custody"
-        elif any(word in transcript_lower for word in ["dowry", "दहेज", "যৌতুক"]):
+        elif any(word in transcript_lower for word in ["dowry", "दहेज", "যৌতুক", "498a", "harassment"]):
             case_info["case_type"] = "dowry"
-        elif any(word in transcript_lower for word in ["violence", "abuse", "हिंसा", "সহিংসতা"]):
+        elif any(word in transcript_lower for word in ["violence", "abuse", "हिंसा", "সহিংসতা", "domestic", "घरेलू", "beat"]):
             case_info["case_type"] = "domestic_violence"
+        elif any(word in transcript_lower for word in ["property", "संपत्ति", "সম্পত্তি", "inheritance", "विरासत"]):
+            case_info["case_type"] = "property_dispute"
         else:
             case_info["case_type"] = "other"
         
+        # Extract location (simple pattern matching)
+        import re
+        # Look for city names or location patterns
+        location_pattern = r'b(?:in|from|at|located)s+([A-Z][a-z]+(?:s+[A-Z][a-z]+)?)b'
+        matches = re.findall(location_pattern, transcript)
+        if matches:
+            case_info["location"] = matches[0]
+        
         # Detect urgency
-        if any(word in transcript_lower for word in ["urgent", "immediate", "emergency", "जरूरी", "জরুরি"]):
+        if any(word in transcript_lower for word in ["urgent", "immediate", "emergency", "asap", "जरूरी", "জরুরি", "तत्काल", "तुरंत"]):
             case_info["urgency"] = "high"
+        elif any(word in transcript_lower for word in ["soon", "quick", "जल्द", "শীঘ্র"]):
+            case_info["urgency"] = "medium"
         
         # Detect documents
-        if any(word in transcript_lower for word in ["document", "certificate", "proof", "दस्तावेज", "নথি"]):
+        if any(word in transcript_lower for word in ["document", "certificate", "proof", "evidence", "दस्तावेज", "নথি", "प्रमाण पत्र"]):
             case_info["has_documents"] = True
         
         return case_info
-
 
 # Singleton instance
 _vapi_service = None

@@ -101,6 +101,7 @@ const ClientDashboard = () => {
     
     try {
       const response = await aiAPI.analyze(aiQueryData);
+      console.log('AI Analysis Response:', response.data);
       setAIResult(response.data.ai_analysis);
       setRecommendedAdvocates(response.data.recommended_advocates || []);
       
@@ -109,6 +110,7 @@ const ClientDashboard = () => {
         description: "AI has analyzed your case. Review the results below.",
       });
     } catch (error) {
+      console.error('AI Analysis Error:', error);
       toast({
         title: "Analysis Failed",
         description: error.response?.data?.detail || "Failed to analyze your query.",
@@ -499,10 +501,8 @@ const ClientDashboard = () => {
             </DialogDescription>
           </DialogHeader>
 
-          {/* Rest of the AI dialog content remains the same as your original with light theme adjustments */}
           {!aiResult ? (
             <form onSubmit={handleAIAnalyze} className="space-y-6 py-4">
-              {/* Form fields with light styling */}
               <div className="space-y-2">
                 <Label>Case Type</Label>
                 <Select value={aiQueryData.case_type} onValueChange={(v) => setAIQueryData({...aiQueryData, case_type: v})}>
@@ -547,31 +547,163 @@ const ClientDashboard = () => {
               </div>
             </form>
           ) : (
-            // Recommended Advocates section with light styling
             <div className="py-4 space-y-8">
-              {/* AI Result Display */}
               <div className="bg-gradient-to-br from-blue-50 to-violet-50 border border-violet-100 rounded-2xl p-8">
-                <h3 className="font-semibold text-violet-700 mb-4 flex items-center gap-2">
+                <h3 className="font-semibold text-violet-700 mb-6 flex items-center gap-2">
                   <Sparkles className="w-5 h-5" /> AI Analysis Summary
                 </h3>
-                {/* Render aiResult content here as per your original logic */}
+                
+                {aiResult?.success && aiResult?.data ? (
+                  <div className="space-y-6">
+                    {aiResult.data.case_classification && (
+                      <div className="bg-white rounded-xl p-5 border border-violet-100">
+                        <h4 className="font-semibold text-slate-800 mb-2 flex items-center gap-2">
+                          📋 Case Type
+                        </h4>
+                        <p className="text-slate-700">{formatCaseType(aiResult.data.case_classification)}</p>
+                      </div>
+                    )}
+
+                    {aiResult.data.legal_sections && aiResult.data.legal_sections.length > 0 && (
+                      <div className="bg-white rounded-xl p-5 border border-violet-100">
+                        <h4 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                          ⚖️ Applicable Legal Sections
+                        </h4>
+                        <ul className="space-y-2">
+                          {aiResult.data.legal_sections.map((section, idx) => (
+                            <li key={idx} className="flex items-start gap-2 text-slate-700">
+                              <span className="text-violet-600 font-bold">•</span>
+                              <span>{section}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {aiResult.data.required_documents && aiResult.data.required_documents.length > 0 && (
+                      <div className="bg-white rounded-xl p-5 border border-violet-100">
+                        <h4 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                          📄 Required Documents
+                        </h4>
+                        <ul className="space-y-2">
+                          {aiResult.data.required_documents.map((doc, idx) => (
+                            <li key={idx} className="flex items-start gap-2 text-slate-700">
+                              <CheckCircle className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" />
+                              <span>{doc}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {aiResult.data.procedural_guidance && (
+                      <div className="bg-white rounded-xl p-5 border border-violet-100">
+                        <h4 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                          🛣️ Procedural Guidance
+                        </h4>
+                        <p className="text-slate-700 whitespace-pre-line">{aiResult.data.procedural_guidance}</p>
+                      </div>
+                    )}
+
+                    {aiResult.data.recommended_actions && aiResult.data.recommended_actions.length > 0 && (
+                      <div className="bg-white rounded-xl p-5 border border-violet-100">
+                        <h4 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                          ✅ Recommended Actions
+                        </h4>
+                        <ul className="space-y-2">
+                          {aiResult.data.recommended_actions.map((action, idx) => (
+                            <li key={idx} className="flex items-start gap-2 text-slate-700">
+                              <span className="text-blue-600 font-bold">{idx + 1}.</span>
+                              <span>{action}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {aiResult.data.estimated_timeline && (
+                      <div className="bg-white rounded-xl p-5 border border-violet-100">
+                        <h4 className="font-semibold text-slate-800 mb-2 flex items-center gap-2">
+                          ⏱️ Estimated Timeline
+                        </h4>
+                        <p className="text-slate-700">{aiResult.data.estimated_timeline}</p>
+                      </div>
+                    )}
+
+                    {aiResult.data.important_notes && (
+                      <div className="bg-amber-50 rounded-xl p-5 border border-amber-200">
+                        <h4 className="font-semibold text-amber-800 mb-3 flex items-center gap-2">
+                          ⚠️ Important Notes
+                        </h4>
+                        {Array.isArray(aiResult.data.important_notes) ? (
+                          <ul className="space-y-2">
+                            {aiResult.data.important_notes.map((note, idx) => (
+                              <li key={idx} className="flex items-start gap-2 text-amber-900">
+                                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                                <span>{note}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-amber-900">{aiResult.data.important_notes}</p>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="flex gap-4 pt-4">
+                      <Button 
+                        variant="outline" 
+                        onClick={() => {
+                          setAIResult(null);
+                          setRecommendedAdvocates([]);
+                        }}
+                        className="flex-1"
+                      >
+                        Start New Query
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-slate-600">No analysis data available. Please try again.</p>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => {
+                        setAIResult(null);
+                        setRecommendedAdvocates([]);
+                      }}
+                      className="mt-4"
+                    >
+                      Start New Query
+                    </Button>
+                  </div>
+                )}
               </div>
 
-              {/* Recommended Advocates List - Same as original */}
               {recommendedAdvocates.length > 0 && (
                 <div>
                   <h3 className="font-semibold text-slate-900 mb-6 flex items-center gap-2">
-                    <Award className="text-amber-500" /> Recommended Advocates
+                    <UserCheck className="text-amber-500 w-6 h-6" /> Recommended Advocates
                   </h3>
                   <div className="space-y-4">
                     {recommendedAdvocates.map((adv) => (
-                      <Card key={adv.id} className="p-6 hover:shadow-md transition-all">
+                      <Card key={adv.id} className="p-6 hover:shadow-lg transition-all border-slate-200">
                         <div className="flex justify-between items-start">
-                          <div>
-                            <h4 className="font-semibold text-lg">{adv.user?.full_name}</h4>
-                            <p className="text-slate-600">{adv.location} • {adv.experience_years} years experience</p>
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-xl text-slate-900 mb-1">{adv.user?.full_name || 'Advocate'}</h4>
+                            <div className="space-y-1 text-sm text-slate-600">
+                              <p>📍 {adv.location}</p>
+                              <p>💼 {adv.experience_years} years experience</p>
+                              <p>⭐ Rating: {adv.rating}/5.0 • {adv.total_cases} cases handled</p>
+                              {adv.specialization && (
+                                <p>🎯 Specialization: {adv.specialization.map(s => formatCaseType(s)).join(', ')}</p>
+                              )}
+                            </div>
                           </div>
-                          <Button onClick={() => handleRequestMeeting(adv)} className="bg-gradient-to-r from-blue-600 to-violet-600">
+                          <Button 
+                            onClick={() => handleRequestMeeting(adv)} 
+                            className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 ml-4"
+                          >
                             Request Meeting
                           </Button>
                         </div>

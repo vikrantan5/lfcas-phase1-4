@@ -3,10 +3,24 @@ import React from 'react';
 import { Mic } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useVoice } from '@/contexts/VoiceContext';
+import { useLocation } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 import '@/styles/voice-button.css';
 
 const VoiceAssistantButton = () => {
   const { setIsOpen } = useVoice();
+  const { isAuthenticated } = useAuth();
+  const location = useLocation();
+
+  // Hide button on case detail pages (messaging view) and when not authenticated
+  const shouldHideButton = !isAuthenticated || 
+    location.pathname.includes('/cases/') ||
+    location.pathname === '/login' ||
+    location.pathname === '/register';
+
+  if (shouldHideButton) {
+    return null;
+  }
 
   return (
     <motion.button

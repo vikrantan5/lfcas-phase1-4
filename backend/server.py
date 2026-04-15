@@ -1172,10 +1172,9 @@ async def send_message(
     if not receiver_id:
         raise HTTPException(status_code=400, detail="Could not determine message recipient")
     
-    # Create message
+    # Create message - only include fields that exist in the database
     message = {
         "case_id": message_data.case_id,
-        "meeting_request_id": message_data.meeting_request_id,
         "sender_id": current_user["user_id"],
         "receiver_id": receiver_id,
         "content": message_data.content,
@@ -1754,18 +1753,27 @@ async def confirm_case_draft(
         if not request.selected_advocate_id:
             raise HTTPException(status_code=400, detail="Advocate selection required")
         
+        # Get advocate details to retrieve user_id for notification
+        advocate_result = supabase.table('advocates').select('id, user_id').eq('id', request.selected_advocate_id).execute()
+        
+        if not advocate_result.data or len(advocate_result.data) == 0:
+            raise HTTPException(status_code=404, detail="Selected advocate not found")
+        
+        advocate = advocate_result.data[0]
+        advocate_user_id = advocate['user_id']
+        
         # Update draft status
         supabase.table('voice_case_drafts').update({
             "status": "confirmed"
         }).eq('id', draft_id).execute()
         
-        # Create meeting request
+        # Create meeting request - Fix location to handle None values
         meeting_request = {
             "client_id": current_user["user_id"],
             "advocate_id": request.selected_advocate_id,
             "case_type": draft['case_type'],
             "description": draft['description'],
-            "location": draft.get('location') or 'Not specified',
+            "location": draft.get('location') if draft.get('location') else 'Not specified',
             "ai_analysis": draft.get('ai_analysis'),
             "status": "pending"
         }
@@ -1775,15 +1783,20 @@ async def confirm_case_draft(
         if not meeting_result.data or len(meeting_result.data) == 0:
             raise HTTPException(status_code=500, detail="Failed to create meeting request")
         
-        # Create notification for advocate
-        notification = {
-            "user_id": request.selected_advocate_id,
-            "notification_type": "meeting_requested",
-            "title": "New Meeting Request from Voice Session",
-            "message": f"New meeting request for {draft['case_type']} case",
-            "related_id": meeting_result.data[0]['id']
-        }
-        supabase.table('notifications').insert(notification).execute()
+        # Create notification for advocate using user_id from advocates table
+        try:
+            notification = {
+                "user_id": advocate_user_id,
+                "notification_type": "meeting_requested",
+                "title": "New Meeting Request from Voice Session",
+                "message": f"New meeting request for {draft['case_type']} case",
+                "related_id": meeting_result.data[0]['id']
+            }
+            supabase.table('notifications').insert(notification).execute()
+            logger.info(f"Notification created for advocate user_id: {advocate_user_id}")
+        except Exception as notif_error:
+            # Log notification error but don't fail the entire request
+            logger.error(f"Failed to create notification: {str(notif_error)}")
         
         return {
             "success": True,
@@ -1796,8 +1809,6 @@ async def confirm_case_draft(
     except Exception as e:
         logger.error(f"Error confirming case draft: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
 
 
 
@@ -1959,3 +1970,51 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     logger.info("LFCAS Backend shut down")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

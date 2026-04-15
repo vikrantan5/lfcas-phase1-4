@@ -283,3 +283,123 @@
     max-width: 85%;
   }
 }
+
+
+/* Status Bar */
+.status-bar {
+  display: flex;
+  gap: 16px;
+  padding: 12px 16px;
+  background: #f3f4f6;
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.status-indicator.active {
+  color: #059669;
+}
+
+.status-indicator.speaking {
+  color: #f59e0b;
+}
+
+.status-indicator.inactive {
+  color: #6b7280;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #059669;
+  animation: blink 2s ease-in-out infinite;
+}
+
+.status-dot.inactive {
+  background: #9ca3af;
+  animation: none;
+}
+
+@keyframes blink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* Empty State */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+  color: #6b7280;
+}
+
+.empty-icon {
+  color: #d1d5db;
+  margin-bottom: 16px;
+}
+
+/* Instructions */
+.instructions {
+  background: #eff6ff;
+  border-left: 4px solid #3b82f6;
+  padding: 12px 16px;
+  border-radius: 8px;
+}
+
+/* Error Alert */
+.error-alert {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #dc2626;
+  margin: 0 32px 16px 32px;
+  font-size: 14px;
+}
+
+/* Stop Call Button */
+.stop-call-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.stop-call-button:hover {
+  background: #dc2626;
+}
+
+/* Message Count */
+.message-count {
+  text-align: center;
+  font-size: 12px;
+  color: #9ca3af;
+  padding: 8px;
+}

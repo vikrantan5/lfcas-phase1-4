@@ -1406,54 +1406,67 @@ async def start_voice_session(
     session_data: VoiceSessionCreate,
     current_user: dict = Depends(get_current_user)
 ):
-    """Start a new voice AI session"""
+    """Start a new voice AI session and create Vapi assistant"""
     try:
         vapi_service = get_vapi_service()
         
-        # Create voice session in database
+        # First, create Vapi assistant
+        logger.info(f"Creating Vapi assistant for language: {session_data.language}")
+        assistant_result = await vapi_service.create_assistant(
+            language=session_data.language,
+            user_context={"user_id": current_user["user_id"]}
+        )
+        
+        if not assistant_result["success"]:
+            logger.error(f"Failed to create Vapi assistant: {assistant_result.get('error')}")
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Failed to create AI assistant: {assistant_result.get('error', 'Unknown error')}"
+            )
+        
+        assistant_id = assistant_result["data"].get("id")
+        logger.info(f"Vapi assistant created successfully: {assistant_id}")
+        
+        # Create voice session in database with assistant ID
         session = {
             "user_id": current_user["user_id"],
             "language": session_data.language,
+            "vapi_assistant_id": assistant_id,
             "status": "initiated"
         }
         
         result = supabase.table('voice_sessions').insert(session).execute()
         
         if not result.data or len(result.data) == 0:
-            raise HTTPException(status_code=500, detail="Failed to create session")
+            raise HTTPException(status_code=500, detail="Failed to create session in database")
         
         session_id = result.data[0]['id']
+        logger.info(f"Voice session created: {session_id}")
         
-        # Create Vapi assistant
-        assistant_result = await vapi_service.create_assistant(
-            language=session_data.language,
-            user_context={"user_id": current_user["user_id"], "session_id": session_id}
-        )
+        # Create initial greeting message
+        language_greetings = {
+            "english": "Hello! I'm your AI legal assistant. I'm here to help you with your family law issue. Could you please tell me what legal problem you're facing?",
+            "hindi": "नमस्ते! मैं आपका AI कानूनी सहायक हूं। मैं आपकी पारिवारिक कानूनी समस्या में मदद के लिए यहां हूं। कृपया मुझे बताएं कि आप किस कानूनी समस्या का सामना कर रहे हैं?",
+            "bengali": "নমস্কার! আমি আপনার AI আইনি সহায়ক। আমি আপনার পারিবারিক আইনের সমস্যায় সাহায্য করতে এখানে আছি। আপনি কোন আইনি সমস্যার সম্মুখীন হচ্ছেন তা আমাকে বলুন?"
+        }
         
-        if assistant_result["success"]:
-            assistant_id = assistant_result["data"].get("id")
-            
-            # Update session with assistant ID
-            supabase.table('voice_sessions').update({
-                "vapi_assistant_id": assistant_id
-            }).eq('id', session_id).execute()
-            
-            # Create initial greeting message
-            greeting_msg = {
-                "session_id": session_id,
-                "sender": "ai",
-                "message": "Session started. Ready to listen...",
-                "message_type": "system"
-            }
-            supabase.table('voice_messages').insert(greeting_msg).execute()
+        greeting_msg = {
+            "session_id": session_id,
+            "sender": "ai",
+            "message": language_greetings.get(session_data.language, language_greetings["english"]),
+            "message_type": "greeting"
+        }
+        supabase.table('voice_messages').insert(greeting_msg).execute()
         
-        return VoiceSessionResponse(**result.data[0])
+        # Return session with assistant ID for frontend to start call
+        session_response = result.data[0]
+        return VoiceSessionResponse(**session_response)
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error starting voice session: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
+        raise HTTPException(status_code=500, detail=f"Failed to start voice session: {str(e)}")
 @api_router.post("/voice/save-message")
 async def save_voice_message(
     message_data: VoiceMessageCreate,

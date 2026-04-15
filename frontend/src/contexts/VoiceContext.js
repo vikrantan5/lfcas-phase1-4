@@ -23,47 +23,54 @@ export const VoiceProvider = ({ children }) => {
   const [messages, setMessages] = useState([]);
   const [language, setLanguage] = useState('english');
   const [isRecording, setIsRecording] = useState(false);
-  const [transcript, setTranscript] = useState('');
   const [analysis, setAnalysis] = useState(null);
   const [caseDraft, setCaseDraft] = useState(null);
   const [recommendedAdvocates, setRecommendedAdvocates] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [vapiCallActive, setVapiCallActive] = useState(false);
   const [fullTranscript, setFullTranscript] = useState('');
+  const [isSpeaking, setIsSpeaking] = useState(false);
   
   const vapiRef = useRef(null);
 
   // Initialize Vapi on mount
   useEffect(() => {
+    console.log('Initializing Vapi with public key:', VAPI_PUBLIC_KEY);
     vapiRef.current = new Vapi(VAPI_PUBLIC_KEY);
     
     // Set up Vapi event listeners
     vapiRef.current.on('call-start', () => {
-      console.log('Vapi call started');
+      console.log('✅ Vapi call started');
       setVapiCallActive(true);
       setIsRecording(true);
     });
 
     vapiRef.current.on('call-end', () => {
-      console.log('Vapi call ended');
+      console.log('❌ Vapi call ended');
       setVapiCallActive(false);
       setIsRecording(false);
+      setIsSpeaking(false);
     });
 
     vapiRef.current.on('speech-start', () => {
-      console.log('User started speaking');
+      console.log('🎤 User started speaking');
+      setIsSpeaking(true);
     });
 
     vapiRef.current.on('speech-end', () => {
-      console.log('User stopped speaking');
+      console.log('🎤 User stopped speaking');
+      setIsSpeaking(false);
     });
 
     vapiRef.current.on('message', (message) => {
-      console.log('Vapi message:', message);
+      console.log('📨 Vapi message:', message);
       
+      // Handle different message types
       if (message.type === 'transcript' && message.transcriptType === 'final') {
         const text = message.transcript;
         const sender = message.role === 'user' ? 'user' : 'ai';
+        
+        console.log(`💬 ${sender}: ${text}`);
         
         // Add message to chat
         setMessages(prev => [...prev, {
@@ -72,9 +79,9 @@ export const VoiceProvider = ({ children }) => {
           timestamp: new Date()
         }]);
         
-        // Update full transcript
+        // Update full transcript with user messages
         if (sender === 'user') {
-          setFullTranscript(prev => prev + ' ' + text);
+          setFullTranscript(prev => (prev + ' ' + text).trim());
         }
         
         // Save to backend
@@ -82,14 +89,26 @@ export const VoiceProvider = ({ children }) => {
           saveMessageToBackend(sender, text);
         }
       }
+      
+      // Handle function calls from Vapi
+      if (message.type === 'function-call') {
+        console.log('📞 Function call:', message.functionCall);
+      }
     });
 
     vapiRef.current.on('error', (error) => {
-      console.error('Vapi error:', error);
+      console.error('❌ Vapi error:', error);
+      setVapiCallActive(false);
+      setIsRecording(false);
+    });
+
+    vapiRef.current.on('volume-level', (volume) => {
+      // You can use this for visual feedback
+      // console.log('Volume level:', volume);
     });
 
     return () => {
-      if (vapiRef.current) {
+      if (vapiRef.current && vapiCallActive) {
         vapiRef.current.stop();
       }
     };
@@ -121,7 +140,10 @@ export const VoiceProvider = ({ children }) => {
 
   const startSession = useCallback(async (selectedLanguage) => {
     try {
+      console.log('🚀 Starting voice session with language:', selectedLanguage);
       const token = localStorage.getItem('token');
+      
+      // Call backend to create session and Vapi assistant
       const response = await axios.post(
         `${API}/voice/start-session`,
         { language: selectedLanguage },
@@ -133,72 +155,85 @@ export const VoiceProvider = ({ children }) => {
       );
       
       const sessionData = response.data;
+      console.log('✅ Session created:', sessionData);
+      
       setSession(sessionData);
       setLanguage(selectedLanguage);
       setFullTranscript('');
+      setMessages([]);
       
-      // Start Vapi call with the assistant
+      // Start Vapi call with the assistant ID
       if (sessionData.vapi_assistant_id && vapiRef.current) {
         try {
+          console.log('📞 Starting Vapi call with assistant:', sessionData.vapi_assistant_id);
           await vapiRef.current.start(sessionData.vapi_assistant_id);
-          console.log('Vapi call started with assistant:', sessionData.vapi_assistant_id);
+          console.log('✅ Vapi call started successfully');
         } catch (vapiError) {
-          console.error('Error starting Vapi call:', vapiError);
-          // Fallback: show initial message
-          setMessages([{
-            sender: 'ai',
-            message: selectedLanguage === 'english' 
-              ? "Hello! I'm your AI legal assistant. Please tell me about your legal problem."
-              : selectedLanguage === 'hindi'
-              ? 'नमस्ते! मैं आपका AI कानूनी सहायक हूं। कृपया मुझे अपनी कानूनी समस्या के बारे में बताएं।'
-              : 'নমস্কার! আমি আপনার AI আইনি সহায়ক। আপনার আইনি সমস্যা সম্পর্কে আমাকে বলুন।',
-            timestamp: new Date()
-          }]);
+          console.error('❌ Error starting Vapi call:', vapiError);
+          throw new Error(`Failed to start voice call: ${vapiError.message}`);
         }
+      } else {
+        throw new Error('No assistant ID received from backend');
       }
       
       return sessionData;
     } catch (error) {
-      console.error('Error starting session:', error);
+      console.error('❌ Error starting session:', error);
       throw error;
     }
   }, []);
 
-  const saveMessage = useCallback(async (sender, message) => {
-    // Messages are now handled by Vapi events
-    // This function is kept for compatibility
-    await saveMessageToBackend(sender, message);
-  }, [session]);
-
   const toggleRecording = useCallback(() => {
-    if (!vapiRef.current) return;
+    if (!vapiRef.current || !vapiCallActive) {
+      console.warn('Cannot toggle recording: Vapi call not active');
+      return;
+    }
     
-    if (vapiCallActive) {
-      // Mute/unmute the call
+    try {
+      // Toggle mute state
       vapiRef.current.setMuted(!isRecording);
       setIsRecording(!isRecording);
+      console.log(isRecording ? '🔇 Muted' : '🔊 Unmuted');
+    } catch (error) {
+      console.error('Error toggling recording:', error);
     }
   }, [vapiCallActive, isRecording]);
 
   const stopVapiCall = useCallback(async () => {
     if (vapiRef.current && vapiCallActive) {
-      await vapiRef.current.stop();
-      setVapiCallActive(false);
-      setIsRecording(false);
+      try {
+        console.log('⏹️ Stopping Vapi call');
+        await vapiRef.current.stop();
+        setVapiCallActive(false);
+        setIsRecording(false);
+        setIsSpeaking(false);
+        console.log('✅ Vapi call stopped');
+      } catch (error) {
+        console.error('Error stopping Vapi call:', error);
+      }
     }
   }, [vapiCallActive]);
 
   const processConversation = useCallback(async (conversationTranscript) => {
-    if (!session) return;
+    if (!session) {
+      throw new Error('No active session');
+    }
     
     try {
       setIsProcessing(true);
+      console.log('🔄 Processing conversation...');
       
       // Stop Vapi call first
       await stopVapiCall();
       
       const token = localStorage.getItem('token');
       const transcript = conversationTranscript || fullTranscript;
+      
+      if (!transcript || transcript.trim().length === 0) {
+        throw new Error('No conversation to process. Please speak or type your problem first.');
+      }
+      
+      console.log('📝 Transcript to process:', transcript);
       
       const response = await axios.post(
         `${API}/voice/process-conversation`,
@@ -214,13 +249,15 @@ export const VoiceProvider = ({ children }) => {
         }
       );
       
+      console.log('✅ Conversation processed:', response.data);
+      
       setAnalysis(response.data.analysis);
       setCaseDraft(response.data.case_draft);
       setRecommendedAdvocates(response.data.recommended_advocates || []);
       
       return response.data;
     } catch (error) {
-      console.error('Error processing conversation:', error);
+      console.error('❌ Error processing conversation:', error);
       throw error;
     } finally {
       setIsProcessing(false);
@@ -251,10 +288,10 @@ export const VoiceProvider = ({ children }) => {
   }, []);
 
   const reset = useCallback(async () => {
+    console.log('🔄 Resetting voice context');
     await stopVapiCall();
     setSession(null);
     setMessages([]);
-    setTranscript('');
     setFullTranscript('');
     setAnalysis(null);
     setCaseDraft(null);
@@ -262,6 +299,7 @@ export const VoiceProvider = ({ children }) => {
     setIsRecording(false);
     setIsProcessing(false);
     setVapiCallActive(false);
+    setIsSpeaking(false);
   }, [stopVapiCall]);
 
   const value = {
@@ -273,20 +311,19 @@ export const VoiceProvider = ({ children }) => {
     setLanguage,
     isRecording,
     setIsRecording,
-    transcript,
-    setTranscript,
     analysis,
     caseDraft,
     recommendedAdvocates,
     isProcessing,
     vapiCallActive,
+    isSpeaking,
     startSession,
-    saveMessage,
     toggleRecording,
     stopVapiCall,
     processConversation,
     confirmDraft,
-    reset
+    reset,
+    fullTranscript
   };
 
   return <VoiceContext.Provider value={value}>{children}</VoiceContext.Provider>;

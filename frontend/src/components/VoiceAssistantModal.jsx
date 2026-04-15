@@ -1,6 +1,6 @@
-// Voice Assistant Modal - Main Conversation Interface
+// Voice Assistant Modal - Main Conversation Interface with Vapi
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Mic, MicOff, Send, Loader, CheckCircle } from 'lucide-react';
+import { X, Mic, MicOff, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useVoice } from '@/contexts/VoiceContext';
 import LanguageSelector from './LanguageSelector';
@@ -15,24 +15,20 @@ const VoiceAssistantModal = () => {
     session,
     messages,
     language,
-    setLanguage,
     isRecording,
-    setIsRecording,
-    transcript,
-    setTranscript,
     analysis,
     isProcessing,
+    vapiCallActive,
+    isSpeaking,
     startSession,
-    saveMessage,
     processConversation,
+    stopVapiCall,
     reset
   } = useVoice();
 
   const [step, setStep] = useState('language'); // 'language', 'conversation', 'summary'
-  const [userInput, setUserInput] = useState('');
-  const [fullConversation, setFullConversation] = useState('');
+  const [error, setError] = useState(null);
   const messagesEndRef = useRef(null);
-  const recognitionRef = useRef(null);
 
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -40,146 +36,46 @@ const VoiceAssistantModal = () => {
     }
   }, [messages]);
 
-  useEffect(() => {
-    // Initialize Web Speech API for voice recognition
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = true;
-      recognitionRef.current.interimResults = true;
-      
-      if (language === 'hindi') {
-        recognitionRef.current.lang = 'hi-IN';
-      } else if (language === 'bengali') {
-        recognitionRef.current.lang = 'bn-IN';
-      } else {
-        recognitionRef.current.lang = 'en-US';
-      }
-
-      recognitionRef.current.onresult = (event) => {
-        let interimTranscript = '';
-        let finalTranscript = '';
-
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcriptPiece = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            finalTranscript += transcriptPiece + ' ';
-          } else {
-            interimTranscript += transcriptPiece;
-          }
-        }
-
-        setTranscript(finalTranscript || interimTranscript);
-        
-        if (finalTranscript) {
-          setFullConversation(prev => prev + ' ' + finalTranscript);
-          saveMessage('user', finalTranscript.trim());
-          
-          // Simulate AI response
-          setTimeout(() => {
-            const aiResponses = {
-              english: [
-                'I understand. Can you tell me more about the location and timeline?',
-                'Thank you for sharing. Do you have any relevant documents?',
-                'I see. How urgent is your situation?',
-              ],
-              hindi: [
-                'मैं समझ गया। क्या आप स्थान और समय-सीमा के बारे में अधिक बता सकते हैं?',
-                'साझा करने के लिए धन्यवाद। क्या आपके पास कोई प्रासंगिक दस्तावेज हैं?',
-                'मैं देख रहा हूं। आपकी स्थिति कितनी जरूरी है?',
-              ],
-              bengali: [
-                'আমি বুঝতে পারছি। আপনি কি অবস্থান এবং সময়রেখা সম্পর্কে আরও বলতে পারেন?',
-                'শেয়ার করার জন্য ধন্যবাদ। আপনার কি কোন প্রাসঙ্গিক নথি আছে?',
-                'আমি দেখছি। আপনার পরিস্থিতি কতটা জরুরি?',
-              ]
-            };
-            
-            const responses = aiResponses[language] || aiResponses['english'];
-            const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-            saveMessage('ai', randomResponse);
-          }, 1000);
-        }
-      };
-
-      recognitionRef.current.onerror = (event) => {
-        console.error('Speech recognition error:', event.error);
-        setIsRecording(false);
-      };
-    }
-
-    return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-    };
-  }, [language, saveMessage, setIsRecording, setTranscript]);
-
   const handleLanguageSelect = async (selectedLanguage) => {
-    setLanguage(selectedLanguage);
-    await startSession(selectedLanguage);
-    setStep('conversation');
-  };
-
-  const toggleRecording = () => {
-    if (!recognitionRef.current) {
-      alert('Voice recognition not supported in this browser');
-      return;
-    }
-
-    if (isRecording) {
-      recognitionRef.current.stop();
-      setIsRecording(false);
-    } else {
-      recognitionRef.current.start();
-      setIsRecording(true);
-    }
-  };
-
-  const handleTextSubmit = (e) => {
-    e.preventDefault();
-    if (userInput.trim()) {
-      setFullConversation(prev => prev + ' ' + userInput);
-      saveMessage('user', userInput.trim());
-      setUserInput('');
-      
-      // Simulate AI response
-      setTimeout(() => {
-        const aiResponses = {
-          english: "Thank you for sharing. I'm analyzing your situation...",
-          hindi: 'साझा करने के लिए धन्यवाद। मैं आपकी स्थिति का विश्लेषण कर रहा हूं...',
-          bengali: 'শেয়ার করার জন্য ধন্যবাদ। আমি আপনার পরিস্থিতি বিশ্লেষণ করছি...'
-        };
-        saveMessage('ai', aiResponses[language] || aiResponses['english']);
-      }, 500);
+    try {
+      setError(null);
+      console.log('Language selected:', selectedLanguage);
+      await startSession(selectedLanguage);
+      setStep('conversation');
+    } catch (err) {
+      console.error('Error starting session:', err);
+      setError(err.response?.data?.detail || err.message || 'Failed to start voice session');
     }
   };
 
   const handleFinishConversation = async () => {
-    if (isRecording) {
-      recognitionRef.current.stop();
-      setIsRecording(false);
-    }
-
-    // Process the conversation
     try {
-      await processConversation(fullConversation || transcript);
+      setError(null);
+      
+      if (messages.length < 2) {
+        setError('Please have a conversation first before finishing. Share your legal problem with the AI assistant.');
+        return;
+      }
+      
+      await processConversation();
       setStep('summary');
-    } catch (error) {
-      console.error('Error processing conversation:', error);
-      alert('Failed to process conversation. Please try again.');
+    } catch (err) {
+      console.error('Error processing conversation:', err);
+      setError(err.response?.data?.detail || err.message || 'Failed to process conversation');
     }
   };
 
-  const handleClose = () => {
-    if (isRecording && recognitionRef.current) {
-      recognitionRef.current.stop();
+  const handleClose = async () => {
+    try {
+      await stopVapiCall();
+    } catch (err) {
+      console.error('Error stopping call:', err);
     }
+    
     setIsOpen(false);
     reset();
     setStep('language');
-    setFullConversation('');
-    setUserInput('');
+    setError(null);
   };
 
   if (!isOpen) return null;
@@ -204,14 +100,22 @@ const VoiceAssistantModal = () => {
           {/* Header */}
           <div className="voice-modal-header">
             <h2 className="voice-modal-title">
-              {step === 'language' && 'Select Language'}
-              {step === 'conversation' && 'AI Legal Assistant'}
-              {step === 'summary' && 'Case Summary'}
+              {step === 'language' && '🌐 Select Language'}
+              {step === 'conversation' && '🤖 AI Legal Assistant'}
+              {step === 'summary' && '📋 Case Summary'}
             </h2>
-            <button onClick={handleClose} className="voice-modal-close">
+            <button onClick={handleClose} className="voice-modal-close" data-testid="close-modal-button">
               <X size={24} />
             </button>
           </div>
+
+          {/* Error Alert */}
+          {error && (
+            <div className="error-alert" data-testid="error-alert">
+              <AlertCircle size={20} />
+              <span>{error}</span>
+            </div>
+          )}
 
           {/* Content */}
           <div className="voice-modal-content">
@@ -221,8 +125,38 @@ const VoiceAssistantModal = () => {
 
             {step === 'conversation' && (
               <div className="conversation-container">
+                {/* Status Bar */}
+                <div className="status-bar" data-testid="status-bar">
+                  {vapiCallActive && (
+                    <div className="status-indicator active">
+                      <span className="status-dot"></span>
+                      <span>Voice call active</span>
+                    </div>
+                  )}
+                  {isSpeaking && (
+                    <div className="status-indicator speaking">
+                      <Mic size={16} />
+                      <span>Listening...</span>
+                    </div>
+                  )}
+                  {!vapiCallActive && (
+                    <div className="status-indicator inactive">
+                      <span className="status-dot inactive"></span>
+                      <span>Call not connected</span>
+                    </div>
+                  )}
+                </div>
+
                 {/* Messages */}
-                <div className="messages-container">
+                <div className="messages-container" data-testid="messages-container">
+                  {messages.length === 0 && vapiCallActive && (
+                    <div className="empty-state">
+                      <Mic size={48} className="empty-icon" />
+                      <p>Start speaking to share your legal problem...</p>
+                      <p className="text-sm text-gray-500">The AI assistant is listening</p>
+                    </div>
+                  )}
+                  
                   {messages.map((msg, index) => (
                     <div
                       key={index}
@@ -241,59 +175,57 @@ const VoiceAssistantModal = () => {
                 </div>
 
                 {/* Voice Wave Animation */}
-                {isRecording && <VoiceWaveAnimation />}
+                {isSpeaking && <VoiceWaveAnimation />}
 
-                {/* Live Transcript */}
-                {transcript && (
-                  <div className="live-transcript" data-testid="live-transcript">
-                    <p className="transcript-label">Live Transcript:</p>
-                    <p className="transcript-text">{transcript}</p>
-                  </div>
-                )}
+                {/* Instructions */}
+                <div className="instructions" data-testid="instructions">
+                  <p className="text-sm text-gray-600">
+                    {language === 'english' && '💡 Speak naturally about your legal problem. The AI will ask follow-up questions.'}
+                    {language === 'hindi' && '💡 अपनी कानूनी समस्या के बारे में स्वाभाविक रूप से बोलें। AI आपसे अतिरिक्त प्रश्न पूछेगा।'}
+                    {language === 'bengali' && '💡 আপনার আইনি সমস্যা সম্পর্কে স্বাভাবিকভাবে কথা বলুন। AI অতিরিক্ত প্রশ্ন জিজ্ঞাসা করবে।'}
+                  </p>
+                </div>
 
                 {/* Controls */}
                 <div className="conversation-controls">
                   <button
-                    onClick={toggleRecording}
-                    className={`voice-record-button ${isRecording ? 'recording' : ''}`}
-                    data-testid="voice-record-button"
-                  >
-                    {isRecording ? <MicOff size={32} /> : <Mic size={32} />}
-                    <span>{isRecording ? 'Stop Recording' : 'Start Recording'}</span>
-                  </button>
-
-                  <form onSubmit={handleTextSubmit} className="text-input-form">
-                    <input
-                      type="text"
-                      value={userInput}
-                      onChange={(e) => setUserInput(e.target.value)}
-                      placeholder="Or type your message..."
-                      className="text-input"
-                      data-testid="text-input"
-                    />
-                    <button type="submit" className="send-button" data-testid="send-button">
-                      <Send size={20} />
-                    </button>
-                  </form>
-
-                  <button
                     onClick={handleFinishConversation}
                     className="finish-button"
-                    disabled={isProcessing || messages.length < 3}
+                    disabled={isProcessing || !vapiCallActive && messages.length < 2}
                     data-testid="finish-conversation-button"
                   >
                     {isProcessing ? (
                       <>
-                        <Loader className="spinner" size={20} />
+                        <Loader2 className="spinner" size={20} />
                         <span>Processing...</span>
                       </>
                     ) : (
                       <>
                         <CheckCircle size={20} />
-                        <span>Finish & Analyze</span>
+                        <span>
+                          {language === 'english' && 'Finish & Analyze'}
+                          {language === 'hindi' && 'समाप्त करें और विश्लेषण करें'}
+                          {language === 'bengali' && 'শেষ করুন এবং বিশ্লেষণ করুন'}
+                        </span>
                       </>
                     )}
                   </button>
+                  
+                  {vapiCallActive && (
+                    <button
+                      onClick={stopVapiCall}
+                      className="stop-call-button"
+                      data-testid="stop-call-button"
+                    >
+                      <MicOff size={20} />
+                      <span>End Call</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Message Count */}
+                <div className="message-count" data-testid="message-count">
+                  {messages.length} messages
                 </div>
               </div>
             )}

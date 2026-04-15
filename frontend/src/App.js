@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SocketProvider } from './contexts/SocketContext';
+import { VoiceProvider } from './contexts/VoiceContext';
 import { Toaster } from './components/ui/toaster';
 import LandingPage from './pages/LandingPage';
 import Login from './pages/auth/Login';
@@ -11,6 +12,8 @@ import CaseDetailPage from './pages/client/CaseDetail';
 import AdvocateDashboard from './pages/advocate/AdvocateDashboard';
 import AdvocateCaseDetail from './pages/advocate/AdvocateCaseDetail';
 import ManagerDashboard from './pages/manager/ManagerDashboard';
+import VoiceAssistantButton from './components/VoiceAssistantButton';
+import VoiceAssistantModal from './components/VoiceAssistantModal';
 import { Loader2 } from 'lucide-react';
 import './App.css';
 
@@ -68,68 +71,73 @@ function App() {
   return (
     <AuthProvider>
       <SocketProvider>
-      <BrowserRouter>
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+        <VoiceProvider>
+          <BrowserRouter>
+            <Routes>
+              {/* Public Routes */}
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
 
-          {/* Home / Dashboard Redirect */}
-          <Route path="/" element={<Home />} />
+              {/* Home / Dashboard Redirect */}
+              <Route path="/" element={<Home />} />
 
-          {/* Client Routes */}
-          <Route
-            path="/client/dashboard"
-            element={
-              <ProtectedRoute allowedRoles={['client']}>
-                <ClientDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/client/cases/:caseId"
-            element={
-              <ProtectedRoute allowedRoles={['client']}>
-                <CaseDetailPage />
-              </ProtectedRoute>
-            }
-          />
+              {/* Client Routes */}
+              <Route
+                path="/client/dashboard"
+                element={
+                  <ProtectedRoute allowedRoles={['client']}>
+                    <ClientDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/client/cases/:caseId"
+                element={
+                  <ProtectedRoute allowedRoles={['client']}>
+                    <CaseDetailPage />
+                  </ProtectedRoute>
+                }
+              />
 
-          {/* Advocate Routes */}
-          <Route
-            path="/advocate/dashboard"
-            element={
-              <ProtectedRoute allowedRoles={['advocate']}>
-                <AdvocateDashboard />
-              </ProtectedRoute>
-            }
-          />
-             <Route
-            path="/advocate/cases/:caseId"
-            element={
-              <ProtectedRoute allowedRoles={['advocate']}>
-                <AdvocateCaseDetail />
-              </ProtectedRoute>
-            }
-          />
+              {/* Advocate Routes */}
+              <Route
+                path="/advocate/dashboard"
+                element={
+                  <ProtectedRoute allowedRoles={['advocate']}>
+                    <AdvocateDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/advocate/cases/:caseId"
+                element={
+                  <ProtectedRoute allowedRoles={['advocate']}>
+                    <AdvocateCaseDetail />
+                  </ProtectedRoute>
+                }
+              />
 
+              {/* Manager Routes */}
+              <Route
+                path="/manager/dashboard"
+                element={
+                  <ProtectedRoute allowedRoles={['platform_manager']}>
+                    <ManagerDashboard />
+                  </ProtectedRoute>
+                }
+              />
 
-          {/* Manager Routes */}
-          <Route
-            path="/manager/dashboard"
-            element={
-              <ProtectedRoute allowedRoles={['platform_manager']}>
-                <ManagerDashboard />
-              </ProtectedRoute>
-            }
-          />
-
-          {/* Catch all */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </BrowserRouter>
-      <Toaster />
-       </SocketProvider>
+              {/* Catch all */}
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+            
+            {/* Voice Assistant - Available globally when logged in */}
+            <VoiceAssistantButton />
+            <VoiceAssistantModal />
+          </BrowserRouter>
+          <Toaster />
+        </VoiceProvider>
+      </SocketProvider>
     </AuthProvider>
   );
 }

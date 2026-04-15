@@ -1,0 +1,30 @@
+/* Voice Wave Animation Styles */
+.voice-wave-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 24px;
+  background: linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%);
+  border-radius: 16px;
+  margin-bottom: 16px;
+}
+
+.voice-wave-bar {
+  width: 6px;
+  height: 24px;
+  background: linear-gradient(180deg, #f59e0b 0%, #ea580c 100%);
+  border-radius: 3px;
+  transform-origin: center;
+}
+
+@media (max-width: 768px) {
+  .voice-wave-container {
+    padding: 20px;
+  }
+  
+  .voice-wave-bar {
+    width: 5px;
+    height: 20px;
+  }
+}

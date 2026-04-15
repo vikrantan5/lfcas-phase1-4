@@ -1,0 +1,55 @@
+/* Voice Assistant Button Styles */
+.voice-assistant-button {
+  position: fixed;
+  bottom: 30px;
+  right: 30px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 24px;
+  background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+  color: white;
+  border: none;
+  border-radius: 50px;
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgba(139, 92, 246, 0.4);
+  transition: all 0.3s ease;
+  z-index: 1000;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.voice-assistant-button:hover {
+  box-shadow: 0 15px 40px rgba(139, 92, 246, 0.6);
+}
+
+.voice-button-icon-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+}
+
+.voice-button-icon {
+  color: white;
+}
+
+.voice-button-text {
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+@media (max-width: 768px) {
+  .voice-assistant-button {
+    bottom: 20px;
+    right: 20px;
+    padding: 14px 20px;
+  }
+  
+  .voice-button-text {
+    font-size: 14px;
+  }
+}

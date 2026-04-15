@@ -1391,6 +1391,365 @@ async def get_admin_logs(
     return [AdminLog(**l) for l in result.data]
 
 
+
+# ============= VOICE AI ENDPOINTS =============
+from voice_models import (
+    VoiceSessionCreate, VoiceSessionResponse, VoiceMessageCreate,
+    VoiceMessageResponse, AICaseAnalysisCreate, AICaseAnalysisResponse,
+    VoiceCaseDraftCreate, VoiceCaseDraftResponse, ProcessVoiceConversationRequest,
+    ConfirmCaseDraftRequest, VoiceToMeetingRequestRequest, VoiceLanguage
+)
+from vapi_service import get_vapi_service
+
+@api_router.post("/voice/start-session", response_model=VoiceSessionResponse)
+async def start_voice_session(
+    session_data: VoiceSessionCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    """Start a new voice AI session"""
+    try:
+        vapi_service = get_vapi_service()
+        
+        # Create voice session in database
+        session = {
+            "user_id": current_user["user_id"],
+            "language": session_data.language,
+            "status": "initiated"
+        }
+        
+        result = supabase.table('voice_sessions').insert(session).execute()
+        
+        if not result.data or len(result.data) == 0:
+            raise HTTPException(status_code=500, detail="Failed to create session")
+        
+        session_id = result.data[0]['id']
+        
+        # Create Vapi assistant
+        assistant_result = await vapi_service.create_assistant(
+            language=session_data.language,
+            user_context={"user_id": current_user["user_id"], "session_id": session_id}
+        )
+        
+        if assistant_result["success"]:
+            assistant_id = assistant_result["data"].get("id")
+            
+            # Update session with assistant ID
+            supabase.table('voice_sessions').update({
+                "vapi_assistant_id": assistant_id
+            }).eq('id', session_id).execute()
+            
+            # Create initial greeting message
+            greeting_msg = {
+                "session_id": session_id,
+                "sender": "ai",
+                "message": "Session started. Ready to listen...",
+                "message_type": "system"
+            }
+            supabase.table('voice_messages').insert(greeting_msg).execute()
+        
+        return VoiceSessionResponse(**result.data[0])
+        
+    except Exception as e:
+        logger.error(f"Error starting voice session: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/voice/save-message")
+async def save_voice_message(
+    message_data: VoiceMessageCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    """Save a message from voice conversation"""
+    try:
+        # Verify session belongs to user
+        session = supabase.table('voice_sessions').select('*').eq('id', message_data.session_id).eq('user_id', current_user["user_id"]).execute()
+        
+        if not session.data or len(session.data) == 0:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        # Save message
+        message = {
+            "session_id": message_data.session_id,
+            "sender": message_data.sender,
+            "message": message_data.message,
+            "message_type": message_data.message_type,
+            "audio_url": message_data.audio_url
+        }
+        
+        result = supabase.table('voice_messages').insert(message).execute()
+        
+        if not result.data or len(result.data) == 0:
+            raise HTTPException(status_code=500, detail="Failed to save message")
+        
+        return {"success": True, "message": VoiceMessageResponse(**result.data[0])}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error saving voice message: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/voice/process-conversation")
+async def process_voice_conversation(
+    request: ProcessVoiceConversationRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Process voice conversation with Groq AI and create case analysis"""
+    try:
+        # Verify session
+        session = supabase.table('voice_sessions').select('*').eq('id', request.session_id).eq('user_id', current_user["user_id"]).execute()
+        
+        if not session.data or len(session.data) == 0:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        vapi_service = get_vapi_service()
+        
+        # Extract case info from transcript
+        case_info = vapi_service.extract_case_info_from_transcript(
+            request.transcript,
+            request.language
+        )
+        
+        # Determine case type
+        case_type_str = case_info.get("case_type", "other")
+        try:
+            case_type = CaseType(case_type_str)
+        except ValueError:
+            case_type = CaseType.OTHER
+        
+        # Analyze with Groq
+        ai_result = await analyze_case_with_groq(
+            case_type=case_type,
+            description=request.transcript,
+            additional_details=case_info.get("additional_details", {})
+        )
+        
+        if not ai_result["success"]:
+            raise HTTPException(status_code=500, detail="AI analysis failed")
+        
+        ai_data = ai_result["data"]
+        
+        # Create AI case analysis record
+        analysis = {
+            "session_id": request.session_id,
+            "user_id": current_user["user_id"],
+            "case_type": case_type_str,
+            "location": case_info.get("location"),
+            "urgency_level": case_info.get("urgency", "medium"),
+            "structured_output": ai_data,
+            "legal_sections": ai_data.get("legal_sections", []),
+            "required_documents": ai_data.get("required_documents", []),
+            "procedural_guidance": ai_data.get("procedural_guidance"),
+            "recommended_actions": ai_data.get("recommended_actions", []),
+            "estimated_timeline": ai_data.get("estimated_timeline"),
+            "important_notes": ai_data.get("important_notes", []),
+            "groq_tokens_used": ai_result.get("tokens_used")
+        }
+        
+        analysis_result = supabase.table('ai_case_analysis').insert(analysis).execute()
+        
+        if not analysis_result.data or len(analysis_result.data) == 0:
+            raise HTTPException(status_code=500, detail="Failed to save analysis")
+        
+        analysis_id = analysis_result.data[0]['id']
+        
+        # Update session
+        supabase.table('voice_sessions').update({
+            "transcript": request.transcript,
+            "status": "completed",
+            "completed_at": datetime.now(timezone.utc).isoformat()
+        }).eq('id', request.session_id).execute()
+        
+        # Get recommended advocates
+        location = case_info.get("location", "")
+        advocates_query = supabase.table('advocates').select('*, users!inner(*)').eq('status', 'approved')
+        
+        if location:
+            advocates_query = advocates_query.ilike('location', f'%{location}%')
+        
+        advocates_result = advocates_query.limit(5).execute()
+        recommended_advocates = advocates_result.data if advocates_result.data else []
+        
+        # Create case draft
+        draft_title = f"{case_type_str.replace('_', ' ').title()} Case - {datetime.now().strftime('%Y-%m-%d')}"
+        draft = {
+            "session_id": request.session_id,
+            "analysis_id": analysis_id,
+            "user_id": current_user["user_id"],
+            "case_type": case_type_str,
+            "title": draft_title,
+            "description": request.transcript[:1000],  # Limit description length
+            "location": location,
+            "ai_analysis": ai_data,
+            "recommended_advocates": recommended_advocates,
+            "status": "draft"
+        }
+        
+        draft_result = supabase.table('voice_case_drafts').insert(draft).execute()
+        
+        if not draft_result.data or len(draft_result.data) == 0:
+            raise HTTPException(status_code=500, detail="Failed to create case draft")
+        
+        # Log AI query
+        ai_log = {
+            "user_id": current_user["user_id"],
+            "query": request.transcript,
+            "response": ai_data,
+            "tokens_used": ai_result.get("tokens_used")
+        }
+        supabase.table('groq_ai_logs').insert(ai_log).execute()
+        
+        return {
+            "success": True,
+            "analysis": AICaseAnalysisResponse(**analysis_result.data[0]),
+            "case_draft": VoiceCaseDraftResponse(**draft_result.data[0]),
+            "recommended_advocates": recommended_advocates
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error processing voice conversation: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/voice/sessions", response_model=List[VoiceSessionResponse])
+async def get_user_voice_sessions(
+    current_user: dict = Depends(get_current_user),
+    limit: int = 20
+):
+    """Get user's voice sessions"""
+    try:
+        result = supabase.table('voice_sessions').select('*').eq('user_id', current_user["user_id"]).order('created_at', desc=True).limit(limit).execute()
+        
+        return result.data if result.data else []
+        
+    except Exception as e:
+        logger.error(f"Error fetching voice sessions: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/voice/session/{session_id}", response_model=VoiceSessionResponse)
+async def get_voice_session_details(
+    session_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get detailed voice session with messages and analysis"""
+    try:
+        # Get session
+        session_result = supabase.table('voice_sessions').select('*').eq('id', session_id).eq('user_id', current_user["user_id"]).execute()
+        
+        if not session_result.data or len(session_result.data) == 0:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        session = session_result.data[0]
+        
+        # Get messages
+        messages_result = supabase.table('voice_messages').select('*').eq('session_id', session_id).order('timestamp').execute()
+        session['messages'] = messages_result.data if messages_result.data else []
+        
+        # Get analysis
+        analysis_result = supabase.table('ai_case_analysis').select('*').eq('session_id', session_id).execute()
+        if analysis_result.data and len(analysis_result.data) > 0:
+            session['analysis'] = analysis_result.data[0]
+        
+        return VoiceSessionResponse(**session)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching session details: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/voice/case-drafts", response_model=List[VoiceCaseDraftResponse])
+async def get_user_case_drafts(
+    current_user: dict = Depends(get_current_user),
+    status: Optional[str] = None
+):
+    """Get user's case drafts from voice sessions"""
+    try:
+        query = supabase.table('voice_case_drafts').select('*').eq('user_id', current_user["user_id"])
+        
+        if status:
+            query = query.eq('status', status)
+        
+        result = query.order('created_at', desc=True).execute()
+        
+        return result.data if result.data else []
+        
+    except Exception as e:
+        logger.error(f"Error fetching case drafts: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/voice/confirm-draft/{draft_id}")
+async def confirm_case_draft(
+    draft_id: str,
+    request: ConfirmCaseDraftRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Confirm case draft and create meeting request with advocate"""
+    try:
+        # Get draft
+        draft_result = supabase.table('voice_case_drafts').select('*').eq('id', draft_id).eq('user_id', current_user["user_id"]).execute()
+        
+        if not draft_result.data or len(draft_result.data) == 0:
+            raise HTTPException(status_code=404, detail="Draft not found")
+        
+        draft = draft_result.data[0]
+        
+        if not request.selected_advocate_id:
+            raise HTTPException(status_code=400, detail="Advocate selection required")
+        
+        # Update draft status
+        supabase.table('voice_case_drafts').update({
+            "status": "confirmed"
+        }).eq('id', draft_id).execute()
+        
+        # Create meeting request
+        meeting_request = {
+            "client_id": current_user["user_id"],
+            "advocate_id": request.selected_advocate_id,
+            "case_type": draft['case_type'],
+            "description": draft['description'],
+            "location": draft.get('location', 'Not specified'),
+            "ai_analysis": draft.get('ai_analysis'),
+            "status": "pending"
+        }
+        
+        meeting_result = supabase.table('meeting_requests').insert(meeting_request).execute()
+        
+        if not meeting_result.data or len(meeting_result.data) == 0:
+            raise HTTPException(status_code=500, detail="Failed to create meeting request")
+        
+        # Create notification for advocate
+        notification = {
+            "user_id": request.selected_advocate_id,
+            "notification_type": "meeting_requested",
+            "title": "New Meeting Request from Voice Session",
+            "message": f"New meeting request for {draft['case_type']} case",
+            "related_id": meeting_result.data[0]['id']
+        }
+        supabase.table('notifications').insert(notification).execute()
+        
+        return {
+            "success": True,
+            "meeting_request": meeting_result.data[0],
+            "message": "Meeting request created successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error confirming case draft: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+
+
 # ============= SOCKET.IO EVENTS =============
 @sio.event
 async def connect(sid, environ):
@@ -1499,11 +1858,19 @@ async def new_message(sid, data):
 @api_router.get("/")
 async def root():
     return {
-        "message": "Legal Family Case Advisor System API - Phase 5-9 Refactored",
-        "version": "3.0.0",
+        "message": "Legal Family Case Advisor System API - Voice AI Enabled",
+        "version": "4.0.0",
         "status": "operational",
         "database": "Supabase PostgreSQL",
-        "flow": "AI Query → Advocate Selection → Meeting Request → Meeting → Advocate Decision → Case Creation"
+        "features": [
+            "AI Voice Legal Assistant (Vapi)",
+            "Multilingual Support (English, Hindi, Bengali)",
+            "Auto Case Creation from Voice",
+            "AI-Powered Case Analysis (Groq)",
+            "Advocate Recommendation",
+            "Meeting Request Workflow"
+        ],
+        "flow": "Voice Conversation → AI Analysis → Case Draft → Advocate Selection → Meeting Request → Case Creation"
     }
 
 

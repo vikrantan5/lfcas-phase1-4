@@ -1406,26 +1406,23 @@ async def start_voice_session(
     session_data: VoiceSessionCreate,
     current_user: dict = Depends(get_current_user)
 ):
-    """Start a new voice AI session and create Vapi assistant"""
+    """Start a new voice AI session using existing Vapi assistant"""
     try:
         vapi_service = get_vapi_service()
         
-        # First, create Vapi assistant
-        logger.info(f"Creating Vapi assistant for language: {session_data.language}")
-        assistant_result = await vapi_service.create_assistant(
-            language=session_data.language,
-            user_context={"user_id": current_user["user_id"]}
-        )
+        # Get existing assistant ID (multilingual assistant)
+        logger.info(f"Starting session with language: {session_data.language}")
+        assistant_result = vapi_service.get_assistant_id(language=session_data.language)
         
         if not assistant_result["success"]:
-            logger.error(f"Failed to create Vapi assistant: {assistant_result.get('error')}")
+            logger.error(f"Failed to get assistant ID: {assistant_result.get('error')}")
             raise HTTPException(
                 status_code=500, 
-                detail=f"Failed to create AI assistant: {assistant_result.get('error', 'Unknown error')}"
+                detail=f"Failed to initialize AI assistant: {assistant_result.get('error', 'Unknown error')}"
             )
         
-        assistant_id = assistant_result["data"].get("id")
-        logger.info(f"Vapi assistant created successfully: {assistant_id}")
+        assistant_id = assistant_result["assistant_id"]
+        logger.info(f"Using Vapi assistant: {assistant_id}")
         
         # Create voice session in database with assistant ID
         session = {

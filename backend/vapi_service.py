@@ -6,12 +6,18 @@ from typing import Dict, List, Optional
 from datetime import datetime
 from dotenv import load_dotenv
 from pathlib import Path
+import logging
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-VAPI_API_KEY = os.environ.get("VAPI_API_KEY")
+VAPI_PRIVATE_KEY = os.environ.get("VAPI_PRIVATE_KEY")
+VAPI_PUBLIC_KEY = os.environ.get("VAPI_PUBLIC_KEY")
+VAPI_ASSISTANT_ID = os.environ.get("VAPI_ASSISTANT_ID")
 VAPI_BASE_URL = "https://api.vapi.ai"
 
 
@@ -51,73 +57,51 @@ class VapiService:
     """Service for managing Vapi voice AI interactions"""
     
     def __init__(self):
-        self.api_key = VAPI_API_KEY
+        self.private_key = VAPI_PRIVATE_KEY
+        self.public_key = VAPI_PUBLIC_KEY
+        self.assistant_id = VAPI_ASSISTANT_ID
         self.base_url = VAPI_BASE_URL
         self.headers = {
-            "Authorization": f"Bearer {self.api_key}",
+            "Authorization": f"Bearer {self.private_key}",
             "Content-Type": "application/json"
         }
+        
+        logger.info(f"VapiService initialized with assistant ID: {self.assistant_id}")
     
-    async def create_assistant(self, language: str = "english", user_context: Dict = None) -> Dict:
-        """Create a Vapi assistant for voice conversation"""
-        
-        prompts = VOICE_PROMPTS.get(language, VOICE_PROMPTS["english"])
-        
-        assistant_config = {
-            "name": f"LFCAS Legal Assistant ({language})",
-            "model": {
-                "provider": "openai",
-                "model": "gpt-4o",
-                "temperature": 0.7,
-                "systemPrompt": f"""You are a compassionate and professional AI legal assistant for family law cases in India.
-                
-Language: {language.upper()}
-Speak ONLY in {language}.
-
-Your role:
-1. Greet the user warmly
-2. Ask about their legal problem
-3. Ask follow-up questions to understand:
-   - Case type (divorce, alimony, custody, dowry, domestic violence)
-   - Location (city/district)
-   - Key details and timeline
-   - Urgency level
-   - Available documents
-4. Be empathetic and professional
-5. Keep questions clear and simple
-6. Don't provide legal advice - just gather information
-7. After gathering information, thank them and inform that analysis is being prepared
-
-Important: 
-- Be culturally sensitive
-- Use simple language
-- Show empathy for their situation
-- Never ask for personal identifying information
-- Focus on legal facts only
-
-Start with: {prompts['greeting']}
-"""
-            },
-            "voice": {
-                "provider": "11labs",
-                "voiceId": "sarah" if language == "english" else "hindi_female" if language == "hindi" else "bengali_female"
-            },
-            "firstMessage": prompts['greeting'],
-            "endCallFunctionEnabled": True,
-            "recordingEnabled": True,
-            "transcriber": {
-                "provider": "deepgram",
-                "model": "nova-2",
-                "language": "en" if language == "english" else "hi" if language == "hindi" else "bn"
+    def get_assistant_id(self, language: str = "english") -> Dict:
+        """
+        Return the existing assistant ID configured for multilingual support.
+        The assistant can handle English, Hindi, and Bengali based on user input.
+        """
+        if not self.assistant_id:
+            return {
+                "success": False,
+                "error": "VAPI_ASSISTANT_ID not configured in environment variables"
             }
+        
+        logger.info(f"Using existing assistant ID: {self.assistant_id} for language: {language}")
+        
+        return {
+            "success": True,
+            "assistant_id": self.assistant_id,
+            "language": language,
+            "public_key": self.public_key
         }
+    
+    async def get_assistant_details(self) -> Dict:
+        """Get details of the configured assistant"""
+        
+        if not self.assistant_id:
+            return {
+                "success": False,
+                "error": "Assistant ID not configured"
+            }
         
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.post(
-                    f"{self.base_url}/assistant",
+                response = await client.get(
+                    f"{self.base_url}/assistant/{self.assistant_id}",
                     headers=self.headers,
-                    json=assistant_config,
                     timeout=30.0
                 )
                 response.raise_for_status()
@@ -126,16 +110,23 @@ Start with: {prompts['greeting']}
                     "data": response.json()
                 }
             except Exception as e:
+                logger.error(f"Error fetching assistant details: {str(e)}")
                 return {
                     "success": False,
                     "error": str(e)
                 }
     
-    async def start_call(self, assistant_id: str, phone_number: Optional[str] = None) -> Dict:
-        """Start a voice call with the assistant"""
+    async def start_call(self, phone_number: Optional[str] = None) -> Dict:
+        """Start a voice call with the configured assistant"""
+        
+        if not self.assistant_id:
+            return {
+                "success": False,
+                "error": "Assistant ID not configured"
+            }
         
         call_config = {
-            "assistantId": assistant_id,
+            "assistantId": self.assistant_id,
             "type": "webCall"  # or "phoneCall" if phone_number provided
         }
         
@@ -159,6 +150,7 @@ Start with: {prompts['greeting']}
                     "data": response.json()
                 }
             except Exception as e:
+                logger.error(f"Error starting call: {str(e)}")
                 return {
                     "success": False,
                     "error": str(e)

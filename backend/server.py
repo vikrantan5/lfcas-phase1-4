@@ -1612,10 +1612,11 @@ async def process_voice_conversation(
         }).eq('id', request.session_id).execute()
         
         # Get recommended advocates
-        location = case_info.get("location", "")
+        location = case_info.get("location", "") or "Not specified"
         advocates_query = supabase.table('advocates').select('*, users!inner(*)').eq('status', 'approved')
         
-        if location:
+        # Only filter by location if it's actually specified
+        if location and location != "Not specified":
             advocates_query = advocates_query.ilike('location', f'%{location}%')
         
         advocates_result = advocates_query.limit(5).execute()
@@ -1764,7 +1765,7 @@ async def confirm_case_draft(
             "advocate_id": request.selected_advocate_id,
             "case_type": draft['case_type'],
             "description": draft['description'],
-            "location": draft.get('location', 'Not specified'),
+            "location": draft.get('location') or 'Not specified',
             "ai_analysis": draft.get('ai_analysis'),
             "status": "pending"
         }

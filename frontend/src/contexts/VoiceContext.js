@@ -5,7 +5,7 @@ import Vapi from '@vapi-ai/web';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
-const VAPI_PUBLIC_KEY = '7cb3571b-a339-421c-96ab-c399521ad924'; // Your Vapi API key
+const VAPI_PUBLIC_KEY = process.env.REACT_APP_VAPI_PUBLIC_KEY || '7cb3571b-a339-421c-96ab-c399521ad924'; // Your Vapi API key
 
 const VoiceContext = createContext();
 

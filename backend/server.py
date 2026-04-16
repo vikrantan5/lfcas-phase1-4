@@ -1379,6 +1379,150 @@ async def get_client_dashboard_summary(
         "unread_notifications": unread_count
     }
 
+
+
+
+@api_router.get("/client/reminders")
+async def get_client_reminders(
+    current_user: dict = Depends(require_role([UserRole.CLIENT]))
+):
+    """Get upcoming reminders for client (hearings + meetings + document deadlines)"""
+    user_id = current_user["user_id"]
+    
+    reminders = []
+    
+    # Get upcoming hearings (next 30 days)
+    today = datetime.now(timezone.utc)
+    thirty_days_later = today + timedelta(days=30)
+    
+    # Get client's cases
+    cases_result = supabase.table('cases').select('id, title, case_type').eq('client_id', user_id).execute()
+    case_ids = [case['id'] for case in cases_result.data] if cases_result.data else []
+    
+    if case_ids:
+        # Get upcoming hearings
+        hearings_result = supabase.table('hearings').select('*').in_('case_id', case_ids).gte('hearing_date', today.isoformat()).lte('hearing_date', thirty_days_later.isoformat()).eq('is_completed', False).order('hearing_date').limit(10).execute()
+        
+        for hearing in hearings_result.data:
+            reminders.append({
+                "type": "Hearing Date",
+                "detail": f"{hearing.get('court_name', 'Court')}, {hearing.get('court_room', '')}",
+                "time": hearing['hearing_date'],
+                "icon": "calendar",
+                "color": "blue",
+                "related_id": hearing['id'],
+                "related_type": "hearing"
+            })
+    
+    # Get upcoming meetings
+    meetings_result = supabase.table('meetings').select('*').eq('client_id', user_id).gte('scheduled_date', today.isoformat()).lte('scheduled_date', thirty_days_later.isoformat()).neq('status', 'completed').order('scheduled_date').limit(10).execute()
+    
+    for meeting in meetings_result.data:
+        # Get advocate name
+        advocate_result = supabase.table('advocates').select('user_id').eq('id', meeting['advocate_id']).execute()
+        if advocate_result.data:
+            user_result = supabase.table('users').select('full_name').eq('id', advocate_result.data[0]['user_id']).execute()
+            advocate_name = user_result.data[0]['full_name'] if user_result.data else "Advocate"
+        else:
+            advocate_name = "Advocate"
+        
+        reminders.append({
+            "type": "Meeting with Advocate",
+            "detail": advocate_name,
+            "time": meeting['scheduled_date'],
+            "icon": "check",
+            "color": "green",
+            "related_id": meeting['id'],
+            "related_type": "meeting"
+        })
+    
+    # Mock document deadlines (you can enhance this by adding a document_deadlines table)
+    # For now, we'll check cases with pending documents
+    if case_ids:
+        # Get cases that need documents
+        cases_needing_docs = supabase.table('cases').select('id, title, required_documents').in_('id', case_ids).neq('current_stage', 'CLOSED').execute()
+        
+        for case in cases_needing_docs.data:
+            required_docs = case.get('required_documents', [])
+            if required_docs and isinstance(required_docs, list):
+                # Get already uploaded documents for this case
+                uploaded_docs = supabase.table('documents').select('document_type').eq('case_id', case['id']).execute()
+                uploaded_types = [doc['document_type'] for doc in uploaded_docs.data] if uploaded_docs.data else []
+                
+                # Check if there are missing documents
+                missing_docs = [doc for doc in required_docs if doc not in uploaded_types]
+                if missing_docs:
+                    reminders.append({
+                        "type": "Document Deadline",
+                        "detail": f"Upload {missing_docs[0]}",
+                        "time": (today + timedelta(days=2)).isoformat(),  # 2 days deadline
+                        "icon": "alert",
+                        "color": "orange",
+                        "related_id": case['id'],
+                        "related_type": "document"
+                    })
+                    break  # Only show one document reminder for now
+    
+    # Sort by time
+    reminders.sort(key=lambda x: x['time'])
+    
+    return {"reminders": reminders[:10]}  # Return top 10 reminders
+
+
+@api_router.get("/client/recommended-advocates")
+async def get_recommended_advocates(
+    current_user: dict = Depends(require_role([UserRole.CLIENT]))
+):
+    """Get recommended advocates based on client's case types and location"""
+    user_id = current_user["user_id"]
+    
+    # Get client's recent cases to understand their needs
+    cases_result = supabase.table('cases').select('case_type, location').eq('client_id', user_id).order('created_at', desc=True).limit(5).execute()
+    
+    # Determine primary case type and location
+    case_types = []
+    locations = []
+    if cases_result.data:
+        case_types = [case.get('case_type') for case in cases_result.data if case.get('case_type')]
+        locations = [case.get('location') for case in cases_result.data if case.get('location')]
+    
+    primary_case_type = case_types[0] if case_types else None
+    primary_location = locations[0] if locations else None
+    
+    # Get approved advocates
+    query = supabase.table('advocates').select('*, users(full_name, email)').eq('status', 'approved')
+    
+    # Filter by specialization if we know the case type
+    if primary_case_type:
+        query = query.contains('specializations', [primary_case_type.lower()])
+    
+    # Filter by location if we know it
+    if primary_location:
+        query = query.ilike('location', f'%{primary_location}%')
+    
+    # Order by rating and limit to top 10
+    advocates_result = query.order('rating', desc=True).limit(10).execute()
+    
+    recommended_advocates = []
+    for advocate in advocates_result.data:
+        user_data = advocate.get('users', {})
+        
+        recommended_advocates.append({
+            "id": advocate['id'],
+            "name": user_data.get('full_name', 'Advocate'),
+            "specialty": advocate.get('specializations', ['Family Law'])[0] if advocate.get('specializations') else 'Family Law',
+            "experience": f"{advocate.get('experience_years', 0)}+ Yrs",
+            "rating": advocate.get('rating', 0.0),
+            "verified": advocate.get('status') == 'approved',
+            "location": advocate.get('location', ''),
+            "bar_council_id": advocate.get('bar_council_id', ''),
+            "bio": advocate.get('bio', '')[:100] + '...' if advocate.get('bio') else ''
+        })
+    
+    return {"advocates": recommended_advocates}
+
+
+
 # ============= ADMIN/ANALYTICS ENDPOINTS =============
 @api_router.get("/admin/stats")
 async def get_platform_stats(

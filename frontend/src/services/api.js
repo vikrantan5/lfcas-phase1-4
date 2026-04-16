@@ -80,6 +80,8 @@ export const caseAPI = {
 // Client Dashboard API
 export const dashboardAPI = {
   getSummary: () => api.get('/client/dashboard-summary'),
+   getReminders: () => api.get('/client/reminders'),
+  getRecommendedAdvocates: () => api.get('/client/recommended-advocates'),
 };
 // Hearing APIs
 export const hearingAPI = {

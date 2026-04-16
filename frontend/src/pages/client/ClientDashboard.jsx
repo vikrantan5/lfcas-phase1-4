@@ -27,7 +27,7 @@ import FindAdvocates from './FindAdvocates';
 import MyAdvocate from './MyAdvocate';
 import MeetingRequests from './MeetingRequests';
 
-// ============ MOCK DATA FOR NEW SECTIONS ============
+// ============ MOCK DATA ============
 const mockCaseTimeline = [
   { stage: 'Petition Filed', status: 'completed', date: '10 Jan 2025', icon: 'check' },
   { stage: 'Court Response', status: 'completed', date: '25 Jan 2025', icon: 'check' },
@@ -35,24 +35,6 @@ const mockCaseTimeline = [
   { stage: 'Judgment', status: 'pending', date: null, icon: 'gavel' },
   { stage: 'Closure', status: 'pending', date: null, icon: 'file' },
 ];
-
-const mockReminders = [
-  { type: 'Hearing Date', detail: 'Family Court, Delhi', time: '20 Apr, 10:00 AM', icon: 'calendar', color: 'blue' },
-  { type: 'Document Deadline', detail: 'Upload Income Proof', time: 'Tomorrow', icon: 'alert', color: 'orange' },
-  { type: 'Meeting with Advocate', detail: 'Rahul Sharma', time: '18 Apr, 4:00 PM', icon: 'check', color: 'green' },
-];
-
-const mockRecommendedAdvocates = [
-  { name: 'Rahul Sharma', specialty: 'Family Law Expert', experience: '12+ Yrs', rating: 4.9, verified: true },
-  { name: 'Anita Verma', specialty: 'Child Custody Specialist', experience: '10+ Yrs', rating: 4.8, verified: false },
-  { name: 'Vikram Singh', specialty: 'Divorce & Alimony', experience: '8+ Yrs', rating: 4.7, verified: false },
-];
-
-const mockInsights = {
-  caseStrength: 7.5,
-  estDuration: '6-12 Months',
-  costRange: '₹20K - ₹50K',
-};
 
 // ============ SIDEBAR COMPONENT ============
 const Sidebar = ({ activeItem, setActiveItem, onStartAI }) => {
@@ -168,11 +150,12 @@ const ClientDashboard = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
-
   const [cases, setCases] = useState([]);
   const [meetingRequests, setMeetingRequests] = useState([]);
   const [meetings, setMeetings] = useState([]);
-   const [dashboardSummary, setDashboardSummary] = useState({
+  const [reminders, setReminders] = useState([]);
+  const [dynamicRecommendedAdvocates, setDynamicRecommendedAdvocates] = useState([]);
+  const [dashboardSummary, setDashboardSummary] = useState({
     total_cases: 0,
     active_cases: 0,
     completed_cases: 0,
@@ -210,7 +193,9 @@ const ClientDashboard = () => {
         loadDashboardSummary(),
         loadCases(),
         loadMeetingRequests(),
-        loadMeetings()
+        loadMeetings(),
+        loadReminders(),
+        loadRecommendedAdvocates()
       ]);
     } catch (error) { console.error('Failed to load data:', error); }
     finally { setLoading(false); }
@@ -258,6 +243,26 @@ const ClientDashboard = () => {
     }
   };
 
+  const loadReminders = async () => {
+    try {
+      const response = await dashboardAPI.getReminders();
+      setReminders(response.data.reminders || []);
+    } catch (error) {
+      console.error('Failed to load reminders:', error);
+      setReminders([]);
+    }
+  };
+
+  const loadRecommendedAdvocates = async () => {
+    try {
+      const response = await dashboardAPI.getRecommendedAdvocates();
+      setDynamicRecommendedAdvocates(response.data.advocates || []);
+    } catch (error) {
+      console.error('Failed to load recommended advocates:', error);
+      setDynamicRecommendedAdvocates([]);
+    }
+  };
+
   const handleAIAnalyze = async (e) => {
     e.preventDefault();
     setAIAnalyzing(true);
@@ -275,10 +280,12 @@ const ClientDashboard = () => {
     setSelectedAdvocate(advocate);
     setShowMeetingRequest(true);
   };
+  
   const handleOpenRatingDialog = (caseItem) => {
     setSelectedCaseForRating(caseItem);
     setShowRatingDialog(true);
   };
+  
   const handleRatingSuccess = () => { loadCases(); };
 
   const submitMeetingRequest = async () => {
@@ -286,11 +293,17 @@ const ClientDashboard = () => {
     setRequestingMeeting(true);
     try {
       await meetingRequestAPI.create({
-        advocate_id: selectedAdvocate.id, case_type: aiQueryData.case_type,
-        description: aiQueryData.description, location: aiQueryData.location, ai_analysis: aiResult
+        advocate_id: selectedAdvocate.id, 
+        case_type: aiQueryData.case_type,
+        description: aiQueryData.description, 
+        location: aiQueryData.location, 
+        ai_analysis: aiResult
       });
       toast({ title: "Meeting Request Sent", description: `Request sent to ${selectedAdvocate.user?.full_name}.` });
-      setShowMeetingRequest(false); setShowAIQuery(false); setAIResult(null); setRecommendedAdvocates([]);
+      setShowMeetingRequest(false); 
+      setShowAIQuery(false); 
+      setAIResult(null); 
+      setRecommendedAdvocates([]);
       loadMeetingRequests();
     } catch (error) {
       toast({ title: "Request Failed", description: "Failed to send request.", variant: "destructive" });
@@ -299,13 +312,32 @@ const ClientDashboard = () => {
 
   const formatCaseType = (type) =>
     type?.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') || type;
+
+  const formatDateTime = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffDays = Math.floor((date - now) / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) return `Today, ${date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`;
+    if (diffDays === 1) return 'Tomorrow';
+    if (diffDays < 7) return `${diffDays} days`;
+    
+    const time = date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    return `${date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}, ${time}`;
+  };
+
   const formatDate = (dateString) =>
     new Date(dateString).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
   const getStatusColor = (status) => {
     const colors = {
-      pending: 'bg-amber-100 text-amber-700', accepted: 'bg-emerald-100 text-emerald-700',
-      rejected: 'bg-red-100 text-red-700', scheduled: 'bg-blue-100 text-blue-700',
-      completed: 'bg-violet-100 text-violet-700', initiated: 'bg-sky-100 text-sky-700',
+      pending: 'bg-amber-100 text-amber-700', 
+      accepted: 'bg-emerald-100 text-emerald-700',
+      rejected: 'bg-red-100 text-red-700', 
+      scheduled: 'bg-blue-100 text-blue-700',
+      completed: 'bg-violet-100 text-violet-700', 
+      initiated: 'bg-sky-100 text-sky-700',
       closed: 'bg-gray-100 text-gray-700',
     };
     return colors[status] || 'bg-gray-100 text-gray-700';
@@ -344,7 +376,7 @@ const ClientDashboard = () => {
           <div className="stat-card stat-cases" data-testid="stat-active-cases">
             <div className="stat-icon-wrap blue"><Briefcase size={22} /></div>
             <div className="stat-info">
-              <span className="stat-value">{cases.length}</span>
+              <span className="stat-value">{dashboardSummary.active_cases || cases.length}</span>
               <span className="stat-label">Active Cases</span>
             </div>
             <ArrowRight size={16} className="stat-arrow" />
@@ -352,21 +384,21 @@ const ClientDashboard = () => {
           <div className="stat-card stat-meetings" data-testid="stat-meetings">
             <div className="stat-icon-wrap purple"><Calendar size={22} /></div>
             <div className="stat-info">
-              <span className="stat-value">{meetings.length}</span>
+              <span className="stat-value">{dashboardSummary.upcoming_meetings || meetings.length}</span>
               <span className="stat-label">This Week</span>
             </div>
           </div>
           <div className="stat-card stat-docs" data-testid="stat-documents">
             <div className="stat-icon-wrap teal"><Upload size={22} /></div>
             <div className="stat-info">
-              <span className="stat-value">8</span>
+              <span className="stat-value">{dashboardSummary.total_documents || 0}</span>
               <span className="stat-label">Uploaded</span>
             </div>
           </div>
           <div className="stat-card stat-score" data-testid="stat-case-score">
             <div className="stat-icon-wrap amber"><Star size={22} /></div>
             <div className="stat-info">
-              <span className="stat-value">7.5<span className="stat-sub">/10</span></span>
+              <span className="stat-value">{dashboardSummary.case_score || 7.5}<span className="stat-sub">/10</span></span>
               <span className="stat-label">Case Score</span>
             </div>
           </div>
@@ -374,7 +406,6 @@ const ClientDashboard = () => {
 
         {/* ===== MAIN GRID ===== */}
         <div className="dashboard-grid">
-
           {/* --- AI ASSISTANT CARD --- */}
           <div className="grid-ai-assistant" data-testid="ai-assistant-card">
             <div className="ai-card">
@@ -521,9 +552,9 @@ const ClientDashboard = () => {
               <button className="section-link" data-testid="reminders-view-all">View All <ArrowRight size={14} /></button>
             </div>
             <div className="reminders-list">
-              {mockReminders.map((rem, i) => (
-                <div key={i} className={`reminder-item ${rem.color}`} data-testid={`reminder-item-${i}`}>
-                  <div className={`reminder-icon ${rem.color}`}>
+              {(reminders.length > 0 ? reminders : []).slice(0, 3).map((rem, i) => (
+                <div key={i} className={`reminder-item ${rem.color || 'blue'}`} data-testid={`reminder-item-${i}`}>
+                  <div className={`reminder-icon ${rem.color || 'blue'}`}>
                     {rem.icon === 'calendar' ? <Calendar size={18} /> :
                      rem.icon === 'alert' ? <AlertCircle size={18} /> :
                      <CheckCircle size={18} />}
@@ -532,9 +563,12 @@ const ClientDashboard = () => {
                     <p className="reminder-type">{rem.type}</p>
                     <p className="reminder-detail"><Star size={10} /> {rem.detail}</p>
                   </div>
-                  <span className={`reminder-time ${rem.color}`}>{rem.time}</span>
+                  <span className={`reminder-time ${rem.color || 'blue'}`}>{formatDateTime(rem.time)}</span>
                 </div>
               ))}
+              {reminders.length === 0 && (
+                <p className="text-gray-500 text-sm text-center py-4">No upcoming reminders</p>
+              )}
             </div>
           </div>
 
@@ -547,7 +581,7 @@ const ClientDashboard = () => {
                 { label: 'Find Advocate', desc: 'Get matched with verified experts', icon: Search, color: 'purple', action: () => {} },
                 { label: 'Download Report', desc: 'Get PDF summary of your case', icon: FileDown, color: 'teal', action: () => {} },
               ].map((item, i) => (
-                <button key={i} className={`quick-action-card ${item.color}`} onClick={item.action} data-testid={`quick-action-${item.label.toLowerCase().replace(/s/g, '-')}`}>
+                <button key={i} className={`quick-action-card ${item.color}`} onClick={item.action} data-testid={`quick-action-${item.label.toLowerCase().replace(/ /g, '-')}`}>
                   <div className={`qa-icon ${item.color}`}><item.icon size={24} /></div>
                   <p className="qa-label">{item.label}</p>
                   <p className="qa-desc">{item.desc}</p>
@@ -563,7 +597,7 @@ const ClientDashboard = () => {
               <button className="section-link" data-testid="advocates-see-all">See All <ArrowRight size={14} /></button>
             </div>
             <div className="advocates-list">
-              {mockRecommendedAdvocates.map((adv, i) => (
+              {(dynamicRecommendedAdvocates.length > 0 ? dynamicRecommendedAdvocates : []).slice(0, 3).map((adv, i) => (
                 <div key={i} className="advocate-row" data-testid={`advocate-item-${i}`}>
                   <div className="advocate-avatar">
                     <div className="avatar-placeholder">{adv.name.charAt(0)}</div>
@@ -576,11 +610,14 @@ const ClientDashboard = () => {
                     <p className="advocate-specialty">{adv.specialty} &bull; {adv.experience}</p>
                   </div>
                   <div className="advocate-rating">
-                    <Star size={14} className="star-icon" /> {adv.rating}
+                    <Star size={14} className="star-icon" /> {adv.rating?.toFixed(1) || adv.rating}
                   </div>
                   <Button size="sm" className="advocate-request-btn" data-testid={`request-advocate-${i}`}>Request</Button>
                 </div>
               ))}
+              {dynamicRecommendedAdvocates.length === 0 && (
+                <p className="text-gray-500 text-sm text-center py-4">No advocates available</p>
+              )}
             </div>
           </div>
 
@@ -597,20 +634,20 @@ const ClientDashboard = () => {
                   <div className="metric-info">
                     <span className="metric-label">Case Strength</span>
                     <div className="metric-bar-wrap">
-                      <div className="metric-bar" style={{ width: `${mockInsights.caseStrength * 10}%` }} />
+                      <div className="metric-bar" style={{ width: `${(dashboardSummary.case_score || 7.5) * 10}%` }} />
                     </div>
                   </div>
-                  <span className="metric-value">{mockInsights.caseStrength}/10</span>
+                  <span className="metric-value">{(dashboardSummary.case_score || 7.5).toFixed(1)}/10</span>
                 </div>
                 <div className="insight-metric" data-testid="insight-duration">
                   <div className="metric-icon blue"><Clock size={16} /></div>
                   <span className="metric-label">Est. Duration</span>
-                  <span className="metric-value">{mockInsights.estDuration}</span>
+                  <span className="metric-value">6-12 Months</span>
                 </div>
                 <div className="insight-metric" data-testid="insight-cost">
                   <div className="metric-icon orange"><AlertCircle size={16} /></div>
                   <span className="metric-label">Cost Range</span>
-                  <span className="metric-value">{mockInsights.costRange}</span>
+                  <span className="metric-value">₹20K - ₹50K</span>
                 </div>
               </div>
               <button className="insights-cta" data-testid="get-detailed-analysis-btn">
@@ -618,11 +655,10 @@ const ClientDashboard = () => {
               </button>
             </div>
           </div>
-
         </div>
       </div>
 
-      {/* ========== DIALOGS (Existing Functionality) ========== */}
+      {/* ========== DIALOGS ========== */}
 
       {/* AI Analysis Dialog */}
       <Dialog open={showAIQuery} onOpenChange={setShowAIQuery}>

@@ -2,43 +2,181 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { caseAPI, aiAPI, meetingRequestAPI, meetingAPI } from '../../services/api';
 import { Button } from '../../components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
+import { Card, CardContent } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../../components/ui/dialog';
-import { 
-  Scale, Plus, FileText, Users, Loader2, Briefcase, Clock, CheckCircle, 
-  Calendar, AlertCircle, UserCheck, Star, Sparkles, ArrowRight, ChevronRight, Zap 
+import {
+  Scale, Plus, FileText, Users, Loader2, Briefcase, Clock, CheckCircle,
+  Calendar, AlertCircle, UserCheck, Star, Sparkles, ArrowRight, ChevronRight, Zap,
+  Home, Bot, FolderOpen, ClipboardCheck, Bell, Search, UserPlus, MessageSquare,
+  Download, BookOpen, Settings, Crown, Send, Upload, FileDown, ChevronDown,
+  MapPin, Gavel, Eye
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../hooks/use-toast';
 import NotificationPanel from '../../components/NotificationPanel';
 import RatingDialog from '../../components/RatingDialog';
+import '../../styles/client-dashboard.css';
 
+// ============ MOCK DATA FOR NEW SECTIONS ============
+const mockCaseTimeline = [
+  { stage: 'Petition Filed', status: 'completed', date: '10 Jan 2025', icon: 'check' },
+  { stage: 'Court Response', status: 'completed', date: '25 Jan 2025', icon: 'check' },
+  { stage: 'Hearing', status: 'upcoming', date: '20 Apr 2025', icon: 'scale' },
+  { stage: 'Judgment', status: 'pending', date: null, icon: 'gavel' },
+  { stage: 'Closure', status: 'pending', date: null, icon: 'file' },
+];
+
+const mockReminders = [
+  { type: 'Hearing Date', detail: 'Family Court, Delhi', time: '20 Apr, 10:00 AM', icon: 'calendar', color: 'blue' },
+  { type: 'Document Deadline', detail: 'Upload Income Proof', time: 'Tomorrow', icon: 'alert', color: 'orange' },
+  { type: 'Meeting with Advocate', detail: 'Rahul Sharma', time: '18 Apr, 4:00 PM', icon: 'check', color: 'green' },
+];
+
+const mockRecommendedAdvocates = [
+  { name: 'Rahul Sharma', specialty: 'Family Law Expert', experience: '12+ Yrs', rating: 4.9, verified: true },
+  { name: 'Anita Verma', specialty: 'Child Custody Specialist', experience: '10+ Yrs', rating: 4.8, verified: false },
+  { name: 'Vikram Singh', specialty: 'Divorce & Alimony', experience: '8+ Yrs', rating: 4.7, verified: false },
+];
+
+const mockInsights = {
+  caseStrength: 7.5,
+  estDuration: '6-12 Months',
+  costRange: '₹20K - ₹50K',
+};
+
+// ============ SIDEBAR COMPONENT ============
+const Sidebar = ({ activeItem, setActiveItem, onStartAI }) => {
+  const sidebarSections = [
+    {
+      title: 'CASE MANAGEMENT',
+      items: [
+        { id: 'my-cases', label: 'My Cases', icon: Briefcase, hasDropdown: true },
+        { id: 'ai-assistant', label: 'AI Legal Assistant', icon: Bot },
+        { id: 'documents', label: 'Documents', icon: FileText },
+        { id: 'case-tracker', label: 'Case Tracker', icon: ClipboardCheck },
+        { id: 'hearings', label: 'Hearings & Reminders', icon: Calendar },
+      ]
+    },
+    {
+      title: 'ADVOCATES',
+      items: [
+        { id: 'find-advocates', label: 'Find Advocates', icon: Search, badge: '7' },
+        { id: 'my-advocate', label: 'My Advocate', icon: UserCheck },
+        { id: 'meeting-requests', label: 'Meeting Requests', icon: MessageSquare },
+      ]
+    },
+    {
+      title: 'MORE',
+      items: [
+        { id: 'downloads', label: 'Downloads', icon: Download },
+        { id: 'legal-resources', label: 'Legal Resources', icon: BookOpen },
+        { id: 'settings', label: 'Settings', icon: Settings },
+      ]
+    }
+  ];
+
+  return (
+    <aside className="lfcas-sidebar" data-testid="sidebar-navigation">
+      <div className="sidebar-header" data-testid="sidebar-header">
+        <button
+          className={`sidebar-item ${activeItem === 'dashboard' ? 'active' : ''}`}
+          onClick={() => setActiveItem('dashboard')}
+          data-testid="sidebar-dashboard-btn"
+        >
+          <Home size={20} />
+          <span>Dashboard</span>
+          {activeItem === 'dashboard' && <span className="sidebar-close-x">×</span>}
+        </button>
+      </div>
+
+      <div className="sidebar-sections">
+        {sidebarSections.map((section) => (
+          <div key={section.title} className="sidebar-section">
+            <p className="sidebar-section-title">{section.title}</p>
+            {section.items.map((item) => (
+              <button
+                key={item.id}
+                className={`sidebar-item ${activeItem === item.id ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveItem(item.id);
+                  if (item.id === 'ai-assistant') onStartAI();
+                }}
+                data-testid={`sidebar-${item.id}-btn`}
+              >
+                <item.icon size={20} />
+                <span>{item.label}</span>
+                {item.badge && <span className="sidebar-badge">{item.badge}</span>}
+                {item.hasDropdown && <ChevronDown size={14} className="sidebar-dropdown-icon" />}
+              </button>
+            ))}
+          </div>
+        ))}
+      </div>
+
+      <div className="sidebar-footer">
+        <button className="premium-btn" data-testid="get-premium-btn">
+          <Crown size={18} />
+          <span>Get Premium</span>
+        </button>
+      </div>
+    </aside>
+  );
+};
+
+// ============ CIRCULAR PROGRESS ============
+const CircularProgress = ({ percentage, size = 100 }) => {
+  const radius = (size - 12) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (percentage / 100) * circumference;
+
+  return (
+    <div className="circular-progress-wrap" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#e8e0f5" strokeWidth="8" />
+        <circle
+          cx={size / 2} cy={size / 2} r={radius} fill="none"
+          stroke="url(#progressGradient)" strokeWidth="8" strokeLinecap="round"
+          strokeDasharray={circumference} strokeDashoffset={offset}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+        <defs>
+          <linearGradient id="progressGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#7c3aed" />
+            <stop offset="100%" stopColor="#a78bfa" />
+          </linearGradient>
+        </defs>
+      </svg>
+      <div className="circular-progress-text">
+        <span className="progress-value">{percentage}%</span>
+      </div>
+    </div>
+  );
+};
+
+// ============ MAIN COMPONENT ============
 const ClientDashboard = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
-  
+
   const [cases, setCases] = useState([]);
   const [meetingRequests, setMeetingRequests] = useState([]);
   const [meetings, setMeetings] = useState([]);
   const [loading, setLoading] = useState(true);
-  
+  const [activeItem, setActiveItem] = useState('dashboard');
+
   // AI Query State
   const [showAIQuery, setShowAIQuery] = useState(false);
-  const [aiQueryData, setAIQueryData] = useState({
-    case_type: '',
-    description: '',
-    location: ''
-  });
+  const [aiQueryData, setAIQueryData] = useState({ case_type: '', description: '', location: '' });
   const [aiAnalyzing, setAIAnalyzing] = useState(false);
   const [aiResult, setAIResult] = useState(null);
   const [recommendedAdvocates, setRecommendedAdvocates] = useState([]);
+  const [aiQuickInput, setAiQuickInput] = useState('');
 
   // Meeting Request State
   const [showMeetingRequest, setShowMeetingRequest] = useState(false);
@@ -49,451 +187,400 @@ const ClientDashboard = () => {
   const [showRatingDialog, setShowRatingDialog] = useState(false);
   const [selectedCaseForRating, setSelectedCaseForRating] = useState(null);
 
-  useEffect(() => {
-    loadAllData();
-  }, []);
+  useEffect(() => { loadAllData(); }, []);
 
   const loadAllData = async () => {
     try {
       setLoading(true);
-      await Promise.all([
-        loadCases(),
-        loadMeetingRequests(),
-        loadMeetings()
-      ]);
-    } catch (error) {
-      console.error('Failed to load data:', error);
-    } finally {
-      setLoading(false);
-    }
+      await Promise.all([loadCases(), loadMeetingRequests(), loadMeetings()]);
+    } catch (error) { console.error('Failed to load data:', error); }
+    finally { setLoading(false); }
   };
 
   const loadCases = async () => {
-    try {
-      const response = await caseAPI.list();
-      setCases(response.data);
-    } catch (error) {
-      console.error('Failed to load cases:', error);
-    }
+    try { const response = await caseAPI.list(); setCases(response.data); }
+    catch (error) { console.error('Failed to load cases:', error); }
   };
-
   const loadMeetingRequests = async () => {
-    try {
-      const response = await meetingRequestAPI.list();
-      setMeetingRequests(response.data);
-    } catch (error) {
-      console.error('Failed to load meeting requests:', error);
-    }
+    try { const response = await meetingRequestAPI.list(); setMeetingRequests(response.data); }
+    catch (error) { console.error('Failed to load meeting requests:', error); }
   };
-
   const loadMeetings = async () => {
-    try {
-      const response = await meetingAPI.list();
-      setMeetings(response.data);
-    } catch (error) {
-      console.error('Failed to load meetings:', error);
-    }
+    try { const response = await meetingAPI.list(); setMeetings(response.data); }
+    catch (error) { console.error('Failed to load meetings:', error); }
   };
 
   const handleAIAnalyze = async (e) => {
     e.preventDefault();
     setAIAnalyzing(true);
-    
     try {
       const response = await aiAPI.analyze(aiQueryData);
-      console.log('AI Analysis Response:', response.data);
       setAIResult(response.data.ai_analysis);
       setRecommendedAdvocates(response.data.recommended_advocates || []);
-      
-      toast({
-        title: "Analysis Complete",
-        description: "AI has analyzed your case. Review the results below.",
-      });
+      toast({ title: "Analysis Complete", description: "AI has analyzed your case." });
     } catch (error) {
-      console.error('AI Analysis Error:', error);
-      toast({
-        title: "Analysis Failed",
-        description: error.response?.data?.detail || "Failed to analyze your query.",
-        variant: "destructive"
-      });
-    } finally {
-      setAIAnalyzing(false);
-    }
+      toast({ title: "Analysis Failed", description: error.response?.data?.detail || "Failed to analyze.", variant: "destructive" });
+    } finally { setAIAnalyzing(false); }
   };
 
   const handleRequestMeeting = (advocate) => {
     setSelectedAdvocate(advocate);
     setShowMeetingRequest(true);
   };
-
   const handleOpenRatingDialog = (caseItem) => {
     setSelectedCaseForRating(caseItem);
     setShowRatingDialog(true);
   };
-
-  const handleRatingSuccess = () => {
-    loadCases();
-  };
+  const handleRatingSuccess = () => { loadCases(); };
 
   const submitMeetingRequest = async () => {
     if (!selectedAdvocate || !aiResult) return;
-    
     setRequestingMeeting(true);
-    
     try {
       await meetingRequestAPI.create({
-        advocate_id: selectedAdvocate.id,
-        case_type: aiQueryData.case_type,
-        description: aiQueryData.description,
-        location: aiQueryData.location,
-        ai_analysis: aiResult
+        advocate_id: selectedAdvocate.id, case_type: aiQueryData.case_type,
+        description: aiQueryData.description, location: aiQueryData.location, ai_analysis: aiResult
       });
-      
-      toast({
-        title: "Meeting Request Sent",
-        description: `Your request has been sent to ${selectedAdvocate.user?.full_name}.`,
-      });
-      
-      setShowMeetingRequest(false);
-      setShowAIQuery(false);
-      setAIResult(null);
-      setRecommendedAdvocates([]);
+      toast({ title: "Meeting Request Sent", description: `Request sent to ${selectedAdvocate.user?.full_name}.` });
+      setShowMeetingRequest(false); setShowAIQuery(false); setAIResult(null); setRecommendedAdvocates([]);
       loadMeetingRequests();
     } catch (error) {
-      toast({
-        title: "Request Failed",
-        description: "Failed to send meeting request. Please try again.",
-        variant: "destructive"
-      });
-    } finally {
-      setRequestingMeeting(false);
-    }
+      toast({ title: "Request Failed", description: "Failed to send request.", variant: "destructive" });
+    } finally { setRequestingMeeting(false); }
   };
 
+  const formatCaseType = (type) =>
+    type?.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') || type;
+  const formatDate = (dateString) =>
+    new Date(dateString).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   const getStatusColor = (status) => {
     const colors = {
-      pending: 'bg-amber-100 text-amber-700 border-amber-200',
-      accepted: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-      rejected: 'bg-red-100 text-red-700 border-red-200',
-      scheduled: 'bg-blue-100 text-blue-700 border-blue-200',
-      completed: 'bg-violet-100 text-violet-700 border-violet-200',
-      initiated: 'bg-sky-100 text-sky-700 border-sky-200',
-      closed: 'bg-gray-100 text-gray-700 border-gray-200',
+      pending: 'bg-amber-100 text-amber-700', accepted: 'bg-emerald-100 text-emerald-700',
+      rejected: 'bg-red-100 text-red-700', scheduled: 'bg-blue-100 text-blue-700',
+      completed: 'bg-violet-100 text-violet-700', initiated: 'bg-sky-100 text-sky-700',
+      closed: 'bg-gray-100 text-gray-700',
     };
     return colors[status] || 'bg-gray-100 text-gray-700';
   };
 
-  const formatCaseType = (type) => {
-    return type?.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') || type;
+  const handleQuickAI = (caseType) => {
+    setAIQueryData({ ...aiQueryData, case_type: caseType });
+    setShowAIQuery(true);
   };
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const stats = [
-    { label: 'Active Cases', value: cases.length, icon: Briefcase, color: 'from-blue-500 to-cyan-500' },
-    { label: 'Meeting Requests', value: meetingRequests.length, icon: Users, color: 'from-violet-500 to-purple-500' },
-    { label: 'Upcoming Meetings', value: meetings.length, icon: Calendar, color: 'from-emerald-500 to-teal-500' },
-    { label: 'Pending Actions', value: meetingRequests.filter(r => r.status === 'pending').length, icon: Clock, color: 'from-amber-500 to-orange-500' },
-  ];
+  // Use first case data or mock for display
+  const primaryCase = cases.length > 0 ? cases[0] : null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 overflow-hidden relative">
-      {/* Soft Decorative Background Orbs */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute -top-40 -left-40 w-[500px] h-[500px] bg-blue-400/10 rounded-full blur-3xl" />
-        <div className="absolute top-40 -right-40 w-[600px] h-[600px] bg-violet-400/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-20 left-1/3 w-[400px] h-[400px] bg-cyan-400/10 rounded-full blur-3xl" />
-      </div>
+    <div className="lfcas-layout" data-testid="client-dashboard">
+      <Sidebar activeItem={activeItem} setActiveItem={setActiveItem} onStartAI={() => setShowAIQuery(true)} />
 
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-xl border-b border-slate-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-5 flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <div className="bg-gradient-to-br from-blue-600 to-violet-600 p-3 rounded-2xl shadow-lg">
-              <Scale className="w-7 h-7 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">LFCAS</h1>
-              <p className="text-xs text-slate-500 -mt-1">Client Portal</p>
-            </div>
+      <div className="lfcas-main">
+        {/* ===== TOP HEADER ===== */}
+        <header className="lfcas-topbar" data-testid="dashboard-header">
+          <div className="topbar-left">
+            <h1 className="topbar-greeting">Hi, {user?.full_name?.split(' ')[0] || 'User'}</h1>
+            <p className="topbar-subtitle">We're here to guide you through your legal journey</p>
           </div>
-
-          <div className="flex items-center gap-6">
+          <div className="topbar-right">
             <NotificationPanel />
-            <div className="flex items-center gap-3">
-              <div className="text-right">
-                <p className="font-semibold text-slate-900">{user?.full_name}</p>
-                <p className="text-xs text-slate-500">{user?.email}</p>
-              </div>
-              <Button 
-                variant="outline" 
-                onClick={logout} 
-                className="border-slate-300 hover:bg-slate-100"
-              >
-                Logout
-              </Button>
+            <div className="topbar-user">
+              <span className="topbar-username">{user?.full_name}</span>
+              <Button variant="outline" size="sm" onClick={logout} data-testid="logout-btn">Logout</Button>
+            </div>
+          </div>
+        </header>
+
+        {/* ===== STATS ROW ===== */}
+        <div className="stats-row" data-testid="stats-row">
+          <div className="stat-card stat-cases" data-testid="stat-active-cases">
+            <div className="stat-icon-wrap blue"><Briefcase size={22} /></div>
+            <div className="stat-info">
+              <span className="stat-value">{cases.length}</span>
+              <span className="stat-label">Active Cases</span>
+            </div>
+            <ArrowRight size={16} className="stat-arrow" />
+          </div>
+          <div className="stat-card stat-meetings" data-testid="stat-meetings">
+            <div className="stat-icon-wrap purple"><Calendar size={22} /></div>
+            <div className="stat-info">
+              <span className="stat-value">{meetings.length}</span>
+              <span className="stat-label">This Week</span>
+            </div>
+          </div>
+          <div className="stat-card stat-docs" data-testid="stat-documents">
+            <div className="stat-icon-wrap teal"><Upload size={22} /></div>
+            <div className="stat-info">
+              <span className="stat-value">8</span>
+              <span className="stat-label">Uploaded</span>
+            </div>
+          </div>
+          <div className="stat-card stat-score" data-testid="stat-case-score">
+            <div className="stat-icon-wrap amber"><Star size={22} /></div>
+            <div className="stat-info">
+              <span className="stat-value">7.5<span className="stat-sub">/10</span></span>
+              <span className="stat-label">Case Score</span>
             </div>
           </div>
         </div>
-      </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-10 relative z-10">
-        {/* Elegant Welcome Banner */}
-        <div className="mb-12 bg-gradient-to-br from-white via-blue-50 to-violet-50 border border-white rounded-3xl p-10 shadow-xl shadow-blue-100/60">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-8">
-            <div>
-              <div className="inline-flex items-center gap-2 bg-white px-5 py-2 rounded-full shadow mb-4">
-                <Sparkles className="w-5 h-5 text-violet-600" />
-                <span className="text-sm font-medium text-violet-700 tracking-wide">Welcome back</span>
-              </div>
-              <h2 className="text-5xl font-bold tracking-tighter text-slate-900 mb-3">
-                Hello, {user?.full_name?.split(' ')[0]}!
-              </h2>
-              <p className="text-xl text-slate-600 max-w-lg">
-                Your legal journey is in safe hands. Let's move forward with confidence.
-              </p>
-            </div>
-            
-            <Button 
-              size="lg"
-              onClick={() => setShowAIQuery(true)}
-              className="bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 hover:from-blue-700 hover:via-violet-700 hover:to-purple-700 text-white shadow-2xl shadow-violet-500/40 px-10 py-7 rounded-2xl text-lg font-semibold flex items-center gap-3 group"
-            >
-              Start AI Analysis
-              <ArrowRight className="group-hover:translate-x-1 transition-transform" />
-            </Button>
-          </div>
-        </div>
+        {/* ===== MAIN GRID ===== */}
+        <div className="dashboard-grid">
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-          {stats.map((stat, index) => (
-            <Card 
-              key={index} 
-              className="group overflow-hidden border-0 shadow-lg hover:shadow-2xl transition-all duration-500 bg-white hover:-translate-y-1"
-            >
-              <div className="p-8">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-slate-500 text-sm font-medium">{stat.label}</p>
-                    <p className="text-5xl font-bold text-slate-900 mt-3 tracking-tighter">{stat.value}</p>
+          {/* --- AI ASSISTANT CARD --- */}
+          <div className="grid-ai-assistant" data-testid="ai-assistant-card">
+            <div className="ai-card">
+              <div className="ai-card-content">
+                <div className="ai-card-left">
+                  <h2 className="ai-card-title">Ask LFCAS AI Assistant</h2>
+                  <p className="ai-card-desc">Describe your legal issue in your own words...</p>
+                  <div className="ai-input-row">
+                    <input
+                      type="text"
+                      placeholder="Type your question here..."
+                      className="ai-input"
+                      value={aiQuickInput}
+                      onChange={(e) => setAiQuickInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && aiQuickInput.trim()) {
+                          setAIQueryData({ ...aiQueryData, description: aiQuickInput });
+                          setShowAIQuery(true);
+                        }
+                      }}
+                      data-testid="ai-quick-input"
+                    />
+                    <button
+                      className="ai-send-btn"
+                      onClick={() => {
+                        if (aiQuickInput.trim()) {
+                          setAIQueryData({ ...aiQueryData, description: aiQuickInput });
+                          setShowAIQuery(true);
+                        }
+                      }}
+                      data-testid="ai-send-btn"
+                    >
+                      <Send size={18} />
+                    </button>
                   </div>
-                  <div className={`p-4 rounded-2xl bg-gradient-to-br ${stat.color} text-white shadow-inner group-hover:scale-110 transition-transform`}>
-                    <stat.icon className="w-7 h-7" />
+                  <div className="ai-quick-tags">
+                    {['Divorce', 'Child Custody', 'Alimony', 'Domestic Violence'].map(tag => (
+                      <button
+                        key={tag}
+                        className="ai-tag"
+                        onClick={() => handleQuickAI(tag.toLowerCase().replace(' ', '_'))}
+                        data-testid={`ai-tag-${tag.toLowerCase().replace(' ', '-')}`}
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="ai-card-illustration">
+                  <div className="ai-robot">
+                    <Bot size={52} />
+                    <Scale size={28} className="robot-scale" />
                   </div>
                 </div>
               </div>
-              <div className="h-1 bg-gradient-to-r from-transparent via-blue-200 to-violet-200" />
-            </Card>
-          ))}
-        </div>
-
-        {/* AI Quick Start Banner */}
-        <div className="mb-10 bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 rounded-3xl p-8 text-white shadow-2xl">
-          <div className="flex items-center justify-between flex-wrap gap-6">
-            <div className="flex items-center gap-5">
-              <div className="bg-white/20 backdrop-blur p-4 rounded-2xl">
-                <Zap className="w-9 h-9" />
-              </div>
-              <div>
-                <h3 className="text-2xl font-semibold">Need Instant Legal Guidance?</h3>
-                <p className="text-blue-100 mt-1">Describe your case and get AI insights + advocate recommendations</p>
-              </div>
             </div>
-            <Button 
-              onClick={() => setShowAIQuery(true)}
-              className="bg-white text-violet-700 hover:bg-white/90 font-semibold px-8 py-6 rounded-2xl text-lg shadow-lg"
-            >
-              Start New Query <Plus className="ml-2" />
-            </Button>
           </div>
-        </div>
 
-        {/* Main Tabs */}
-        <Tabs defaultValue="meeting-requests" className="space-y-8">
-          <TabsList className="bg-white border border-slate-200 p-1.5 rounded-2xl shadow-sm">
-            <TabsTrigger value="meeting-requests" className="rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-violet-600 data-[state=active]:text-white px-8 py-3 text-base">
-              Meeting Requests ({meetingRequests.length})
-            </TabsTrigger>
-            <TabsTrigger value="meetings" className="rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-violet-600 data-[state=active]:text-white px-8 py-3 text-base">
-              My Meetings ({meetings.length})
-            </TabsTrigger>
-            <TabsTrigger value="cases" className="rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-violet-600 data-[state=active]:text-white px-8 py-3 text-base">
-              My Cases ({cases.length})
-            </TabsTrigger>
-          </TabsList>
-
-          {/* Meeting Requests Tab */}
-          <TabsContent value="meeting-requests" className="space-y-6">
-            {loading ? (
-              <div className="flex justify-center py-20">
-                <Loader2 className="w-10 h-10 animate-spin text-violet-600" />
-              </div>
-            ) : meetingRequests.length === 0 ? (
-              <Card className="bg-white border-slate-100 p-16 text-center">
-                <Users className="w-20 h-20 mx-auto text-slate-300 mb-6" />
-                <h3 className="text-2xl font-semibold text-slate-800 mb-3">No Meeting Requests Yet</h3>
-                <p className="text-slate-600 max-w-md mx-auto">Start by analyzing your case with AI and request a meeting with a suitable advocate.</p>
-                <Button onClick={() => setShowAIQuery(true)} className="mt-8 bg-gradient-to-r from-blue-600 to-violet-600">
-                  Start AI Analysis
-                </Button>
-              </Card>
-            ) : (
-              meetingRequests.map((request, index) => (
-                <Card key={index} className="bg-white border border-slate-100 hover:border-violet-200 transition-all group overflow-hidden">
-                  <CardContent className="p-8">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-4">
-                          <Badge className="bg-blue-100 text-blue-700">{formatCaseType(request.case_type)}</Badge>
-                          <Badge className={getStatusColor(request.status)}>{request.status.toUpperCase()}</Badge>
-                        </div>
-                        <h3 className="text-xl font-semibold text-slate-900 mb-2">
-                          Meeting Request with {request.advocate?.user?.full_name || 'Advocate'}
-                        </h3>
-                        <p className="text-slate-600 line-clamp-2 mb-4">{request.description}</p>
-                        <div className="flex gap-6 text-sm text-slate-500">
-                          <div className="flex items-center gap-2">
-                            <Clock className="w-4 h-4" />
-                            {formatDate(request.created_at)}
-                          </div>
-                        </div>
-                      </div>
-                      <ChevronRight className="w-6 h-6 text-slate-400 group-hover:text-violet-600 transition-colors" />
-                    </div>
-
-                    {request.status === 'rejected' && request.rejection_reason && (
-                      <div className="mt-6 bg-red-50 border border-red-100 rounded-2xl p-5 text-red-700">
-                        <p className="font-medium">Request Declined</p>
-                        <p className="text-sm mt-1">{request.rejection_reason}</p>
+          {/* --- CASE PROGRESS TIMELINE --- */}
+          <div className="grid-timeline" data-testid="case-progress-timeline">
+            <div className="section-header">
+              <h3 className="section-title">Case Progress Timeline</h3>
+              <button className="section-link" data-testid="timeline-view-details">View Details <ArrowRight size={14} /></button>
+            </div>
+            <div className="timeline-track">
+              {mockCaseTimeline.map((step, i) => (
+                <div key={i} className={`timeline-step ${step.status}`} data-testid={`timeline-step-${i}`}>
+                  <div className="timeline-icon-wrap">
+                    {step.status === 'completed' ? (
+                      <CheckCircle size={28} />
+                    ) : step.status === 'upcoming' ? (
+                      <Scale size={24} />
+                    ) : (
+                      <div className="timeline-pending-icon">
+                        {step.icon === 'gavel' ? <Gavel size={20} /> : <FileText size={20} />}
                       </div>
                     )}
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </TabsContent>
+                  </div>
+                  {i < mockCaseTimeline.length - 1 && <div className={`timeline-connector ${step.status}`} />}
+                  <p className="timeline-label">{step.stage}</p>
+                  <p className="timeline-status">
+                    {step.status === 'completed' ? 'Completed' : step.status === 'upcoming' ? 'Upcoming' : 'Pending'}
+                  </p>
+                  {step.date && <p className="timeline-date">{step.date}</p>}
+                </div>
+              ))}
+            </div>
+          </div>
 
-          {/* Meetings Tab */}
-          <TabsContent value="meetings" className="space-y-6">
+          {/* --- YOUR CASES OVERVIEW --- */}
+          <div className="grid-cases-overview" data-testid="cases-overview">
+            <div className="section-header">
+              <h3 className="section-title">Your Cases Overview</h3>
+              <button className="section-link" data-testid="cases-see-all">See All <ArrowRight size={14} /></button>
+            </div>
             {loading ? (
-              <div className="flex justify-center py-20">
-                <Loader2 className="w-10 h-10 animate-spin text-violet-600" />
-              </div>
-            ) : meetings.length === 0 ? (
-              <Card className="bg-white border-slate-100 p-16 text-center">
-                <Calendar className="w-20 h-20 mx-auto text-slate-300 mb-6" />
-                <h3 className="text-2xl font-semibold text-slate-800">No Meetings Scheduled</h3>
-                <p className="text-slate-600 mt-3">Your scheduled meetings will appear here.</p>
-              </Card>
+              <div className="loading-center"><Loader2 className="animate-spin" size={32} /></div>
             ) : (
-              meetings.map((meeting, index) => (
-                <Card key={index} className="bg-white border border-slate-100 hover:border-emerald-200 transition-all">
-                  <CardContent className="p-8">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <Badge className={getStatusColor(meeting.status)}>{meeting.status}</Badge>
-                        <h3 className="text-xl font-semibold text-slate-900 mt-3">
-                          Meeting with {meeting.advocate?.user?.full_name}
-                        </h3>
-                        <div className="mt-4 space-y-2 text-slate-600">
-                          <div className="flex items-center gap-2">
-                            <Calendar className="w-5 h-5 text-emerald-600" />
-                            <span>{formatDate(meeting.scheduled_date)}</span>
-                          </div>
-                          {meeting.meeting_link && (
-                            <Button 
-                              onClick={() => window.open(meeting.meeting_link, '_blank')}
-                              className="mt-4 bg-emerald-600 hover:bg-emerald-700"
-                            >
-                              Join Meeting
-                            </Button>
-                          )}
-                        </div>
-                      </div>
+              <div className="case-overview-card" data-testid="primary-case-card">
+                <div className="case-card-top">
+                  <div className="case-card-left-info">
+                    <span className="case-id">{primaryCase ? `LFC${String(primaryCase.id || '').slice(0, 3).toUpperCase()}` : 'LFC123'}</span>
+                    <h4 className="case-title">
+                      {primaryCase ? formatCaseType(primaryCase.case_type) + ' Case' : 'Divorce Case'}
+                    </h4>
+                    <Badge className="case-status-badge">
+                      <Gavel size={12} />
+                      {primaryCase?.current_stage ? primaryCase.current_stage.replace('_', ' ') : 'Hearing Scheduled'}
+                    </Badge>
+                  </div>
+                  <div className="case-card-right-progress">
+                    <div className="case-illustration">
+                      <Gavel size={40} className="gavel-icon" />
                     </div>
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </TabsContent>
-
-          {/* Cases Tab */}
-          <TabsContent value="cases" className="space-y-6">
-            {loading ? (
-              <div className="flex justify-center py-20">
-                <Loader2 className="w-10 h-10 animate-spin text-violet-600" />
+                    <CircularProgress percentage={primaryCase ? 65 : 65} size={90} />
+                    <span className="progress-label">Progress</span>
+                  </div>
+                </div>
+                <div className="case-card-details">
+                  <p><UserCheck size={14} /> <strong>Advocate:</strong> {primaryCase?.advocate?.user?.full_name || 'Rahul Sharma'}</p>
+                  <p><Clock size={14} /> <strong>Next Hearing:</strong> 20 Apr, 10:00 AM</p>
+                  <p><MapPin size={14} /> <strong>Court:</strong> Family Court, Delhi</p>
+                </div>
+                <div className="case-card-actions">
+                  <Button
+                    className="btn-open-dashboard"
+                    onClick={() => primaryCase && navigate(`/client/cases/${primaryCase.id}`)}
+                    data-testid="open-case-dashboard-btn"
+                  >
+                    Open Dashboard
+                  </Button>
+                  <Button variant="outline" className="btn-download-summary" data-testid="download-summary-btn">
+                    <Download size={14} /> Download Summary <ChevronDown size={14} />
+                  </Button>
+                </div>
               </div>
-            ) : cases.length === 0 ? (
-              <Card className="bg-white border-slate-100 p-16 text-center">
-                <Briefcase className="w-20 h-20 mx-auto text-slate-300 mb-6" />
-                <h3 className="text-2xl font-semibold text-slate-800">No Active Cases</h3>
-                <p className="text-slate-600 mt-3">Your active cases will appear here once accepted by an advocate.</p>
-              </Card>
-            ) : (
-              cases.map((caseItem, index) => (
-                <Card key={index} className="bg-white border border-slate-100 hover:border-violet-200 transition-all group">
-                  <CardContent className="p-8">
-                    <div className="flex items-start justify-between">
-                      <div 
-                        className="flex-1 cursor-pointer"
-                        onClick={() => navigate(`/client/cases/${caseItem.id}`)}
-                      >
-                        <div className="flex items-center gap-3 mb-4">
-                          <Badge className="bg-violet-100 text-violet-700">{formatCaseType(caseItem.case_type)}</Badge>
-                          <Badge className={getStatusColor(caseItem.status)}>
-                            {caseItem.current_stage || caseItem.status}
-                          </Badge>
-                        </div>
-                        <h3 className="text-xl font-semibold text-slate-900 mb-2">{caseItem.title}</h3>
-                        <p className="text-slate-600 line-clamp-2 mb-4">{caseItem.description}</p>
-                        <div className="flex gap-6 text-sm text-slate-500">
-                          <div>Advocate: {caseItem.advocate?.user?.full_name || 'Not Assigned'}</div>
-                          <div>{formatDate(caseItem.created_at)}</div>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col gap-3">
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => navigate(`/client/cases/${caseItem.id}`)}
-                        >
-                          View Details
-                        </Button>
-                        {caseItem.current_stage === 'CLOSED' && (
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => handleOpenRatingDialog(caseItem)}
-                            className="border-amber-400 text-amber-600 hover:bg-amber-50"
-                          >
-                            <Star className="w-4 h-4 mr-1" /> Rate Advocate
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
             )}
-          </TabsContent>
-        </Tabs>
-      </main>
+          </div>
+
+          {/* --- UPCOMING REMINDERS --- */}
+          <div className="grid-reminders" data-testid="upcoming-reminders">
+            <div className="section-header">
+              <h3 className="section-title">Upcoming Reminders</h3>
+              <button className="section-link" data-testid="reminders-view-all">View All <ArrowRight size={14} /></button>
+            </div>
+            <div className="reminders-list">
+              {mockReminders.map((rem, i) => (
+                <div key={i} className={`reminder-item ${rem.color}`} data-testid={`reminder-item-${i}`}>
+                  <div className={`reminder-icon ${rem.color}`}>
+                    {rem.icon === 'calendar' ? <Calendar size={18} /> :
+                     rem.icon === 'alert' ? <AlertCircle size={18} /> :
+                     <CheckCircle size={18} />}
+                  </div>
+                  <div className="reminder-info">
+                    <p className="reminder-type">{rem.type}</p>
+                    <p className="reminder-detail"><Star size={10} /> {rem.detail}</p>
+                  </div>
+                  <span className={`reminder-time ${rem.color}`}>{rem.time}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* --- QUICK ACTIONS --- */}
+          <div className="grid-quick-actions" data-testid="quick-actions">
+            <div className="quick-actions-row">
+              {[
+                { label: 'Start New Case', desc: 'Create a new case with AI guidance', icon: FileText, color: 'green', action: () => setShowAIQuery(true) },
+                { label: 'Upload Documents', desc: 'Secure & advocate controlled', icon: Upload, color: 'blue', action: () => {} },
+                { label: 'Find Advocate', desc: 'Get matched with verified experts', icon: Search, color: 'purple', action: () => {} },
+                { label: 'Download Report', desc: 'Get PDF summary of your case', icon: FileDown, color: 'teal', action: () => {} },
+              ].map((item, i) => (
+                <button key={i} className={`quick-action-card ${item.color}`} onClick={item.action} data-testid={`quick-action-${item.label.toLowerCase().replace(/s/g, '-')}`}>
+                  <div className={`qa-icon ${item.color}`}><item.icon size={24} /></div>
+                  <p className="qa-label">{item.label}</p>
+                  <p className="qa-desc">{item.desc}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* --- RECOMMENDED ADVOCATES --- */}
+          <div className="grid-advocates" data-testid="recommended-advocates">
+            <div className="section-header">
+              <h3 className="section-title">Recommended Advocates</h3>
+              <button className="section-link" data-testid="advocates-see-all">See All <ArrowRight size={14} /></button>
+            </div>
+            <div className="advocates-list">
+              {mockRecommendedAdvocates.map((adv, i) => (
+                <div key={i} className="advocate-row" data-testid={`advocate-item-${i}`}>
+                  <div className="advocate-avatar">
+                    <div className="avatar-placeholder">{adv.name.charAt(0)}</div>
+                  </div>
+                  <div className="advocate-info">
+                    <p className="advocate-name">
+                      {adv.name}
+                      {adv.verified && <CheckCircle size={14} className="verified-badge" />}
+                    </p>
+                    <p className="advocate-specialty">{adv.specialty} &bull; {adv.experience}</p>
+                  </div>
+                  <div className="advocate-rating">
+                    <Star size={14} className="star-icon" /> {adv.rating}
+                  </div>
+                  <Button size="sm" className="advocate-request-btn" data-testid={`request-advocate-${i}`}>Request</Button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* --- LEGAL INSIGHTS --- */}
+          <div className="grid-insights" data-testid="legal-insights">
+            <div className="insights-card">
+              <div className="insights-header">
+                <div className="insights-icon-wrap"><Sparkles size={20} /></div>
+                <h3 className="insights-title">Legal Insights for You</h3>
+              </div>
+              <div className="insights-metrics">
+                <div className="insight-metric" data-testid="insight-case-strength">
+                  <div className="metric-icon purple"><Scale size={16} /></div>
+                  <div className="metric-info">
+                    <span className="metric-label">Case Strength</span>
+                    <div className="metric-bar-wrap">
+                      <div className="metric-bar" style={{ width: `${mockInsights.caseStrength * 10}%` }} />
+                    </div>
+                  </div>
+                  <span className="metric-value">{mockInsights.caseStrength}/10</span>
+                </div>
+                <div className="insight-metric" data-testid="insight-duration">
+                  <div className="metric-icon blue"><Clock size={16} /></div>
+                  <span className="metric-label">Est. Duration</span>
+                  <span className="metric-value">{mockInsights.estDuration}</span>
+                </div>
+                <div className="insight-metric" data-testid="insight-cost">
+                  <div className="metric-icon orange"><AlertCircle size={16} /></div>
+                  <span className="metric-label">Cost Range</span>
+                  <span className="metric-value">{mockInsights.costRange}</span>
+                </div>
+              </div>
+              <button className="insights-cta" data-testid="get-detailed-analysis-btn">
+                Get Detailed Analysis <ArrowRight size={14} />
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      {/* ========== DIALOGS (Existing Functionality) ========== */}
 
       {/* AI Analysis Dialog */}
       <Dialog open={showAIQuery} onOpenChange={setShowAIQuery}>
-        <DialogContent className="max-w-4xl bg-white border-slate-200 rounded-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl bg-white border-slate-200 rounded-3xl max-h-[90vh] overflow-y-auto" data-testid="ai-analysis-dialog">
           <DialogHeader>
-            <DialogTitle className="text-3xl font-bold text-slate-900 flex items-center gap-3">
+            <DialogTitle className="text-2xl font-bold text-slate-900 flex items-center gap-3">
               <Sparkles className="text-violet-600" /> AI Legal Analysis
             </DialogTitle>
             <DialogDescription className="text-slate-600">
@@ -505,10 +592,8 @@ const ClientDashboard = () => {
             <form onSubmit={handleAIAnalyze} className="space-y-6 py-4">
               <div className="space-y-2">
                 <Label>Case Type</Label>
-                <Select value={aiQueryData.case_type} onValueChange={(v) => setAIQueryData({...aiQueryData, case_type: v})}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select case type" />
-                  </SelectTrigger>
+                <Select value={aiQueryData.case_type} onValueChange={(v) => setAIQueryData({ ...aiQueryData, case_type: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select case type" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="divorce">Divorce</SelectItem>
                     <SelectItem value="alimony">Alimony</SelectItem>
@@ -519,167 +604,66 @@ const ClientDashboard = () => {
                   </SelectContent>
                 </Select>
               </div>
-
               <div className="space-y-2">
                 <Label>Location</Label>
-                <Input 
-                  value={aiQueryData.location}
-                  onChange={(e) => setAIQueryData({...aiQueryData, location: e.target.value})}
-                  placeholder="e.g. Kolkata, West Bengal"
-                />
+                <Input value={aiQueryData.location} onChange={(e) => setAIQueryData({ ...aiQueryData, location: e.target.value })} placeholder="e.g. Kolkata, West Bengal" />
               </div>
-
               <div className="space-y-2">
                 <Label>Describe Your Situation</Label>
-                <Textarea 
-                  value={aiQueryData.description}
-                  onChange={(e) => setAIQueryData({...aiQueryData, description: e.target.value})}
-                  rows={6}
-                  placeholder="Please provide details about your legal issue..."
-                />
+                <Textarea value={aiQueryData.description} onChange={(e) => setAIQueryData({ ...aiQueryData, description: e.target.value })} rows={6} placeholder="Please provide details about your legal issue..." />
               </div>
-
               <div className="flex justify-end gap-4 pt-4">
                 <Button type="button" variant="outline" onClick={() => setShowAIQuery(false)}>Cancel</Button>
-                <Button type="submit" disabled={aiAnalyzing} className="bg-gradient-to-r from-blue-600 to-violet-600">
+                <Button type="submit" disabled={aiAnalyzing} className="bg-gradient-to-r from-violet-600 to-purple-600">
                   {aiAnalyzing ? "Analyzing..." : "Analyze with AI"}
                 </Button>
               </div>
             </form>
           ) : (
             <div className="py-4 space-y-8">
-              <div className="bg-gradient-to-br from-blue-50 to-violet-50 border border-violet-100 rounded-2xl p-8">
+              <div className="bg-gradient-to-br from-violet-50 to-purple-50 border border-violet-100 rounded-2xl p-8">
                 <h3 className="font-semibold text-violet-700 mb-6 flex items-center gap-2">
                   <Sparkles className="w-5 h-5" /> AI Analysis Summary
                 </h3>
-                
                 {aiResult?.success && aiResult?.data ? (
                   <div className="space-y-6">
                     {aiResult.data.case_classification && (
                       <div className="bg-white rounded-xl p-5 border border-violet-100">
-                        <h4 className="font-semibold text-slate-800 mb-2 flex items-center gap-2">
-                          📋 Case Type
-                        </h4>
+                        <h4 className="font-semibold text-slate-800 mb-2">Case Type</h4>
                         <p className="text-slate-700">{formatCaseType(aiResult.data.case_classification)}</p>
                       </div>
                     )}
-
-                    {aiResult.data.legal_sections && aiResult.data.legal_sections.length > 0 && (
+                    {aiResult.data.legal_sections?.length > 0 && (
                       <div className="bg-white rounded-xl p-5 border border-violet-100">
-                        <h4 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
-                          ⚖️ Applicable Legal Sections
-                        </h4>
-                        <ul className="space-y-2">
-                          {aiResult.data.legal_sections.map((section, idx) => (
-                            <li key={idx} className="flex items-start gap-2 text-slate-700">
-                              <span className="text-violet-600 font-bold">•</span>
-                              <span>{section}</span>
-                            </li>
-                          ))}
-                        </ul>
+                        <h4 className="font-semibold text-slate-800 mb-3">Applicable Legal Sections</h4>
+                        <ul className="space-y-2">{aiResult.data.legal_sections.map((s, idx) => (
+                          <li key={idx} className="text-slate-700"><span className="text-violet-600 font-bold mr-2">•</span>{s}</li>
+                        ))}</ul>
                       </div>
                     )}
-
-                    {aiResult.data.required_documents && aiResult.data.required_documents.length > 0 && (
+                    {aiResult.data.required_documents?.length > 0 && (
                       <div className="bg-white rounded-xl p-5 border border-violet-100">
-                        <h4 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
-                          📄 Required Documents
-                        </h4>
-                        <ul className="space-y-2">
-                          {aiResult.data.required_documents.map((doc, idx) => (
-                            <li key={idx} className="flex items-start gap-2 text-slate-700">
-                              <CheckCircle className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" />
-                              <span>{doc}</span>
-                            </li>
-                          ))}
-                        </ul>
+                        <h4 className="font-semibold text-slate-800 mb-3">Required Documents</h4>
+                        <ul className="space-y-2">{aiResult.data.required_documents.map((d, idx) => (
+                          <li key={idx} className="flex items-start gap-2 text-slate-700"><CheckCircle className="w-4 h-4 text-emerald-600 mt-0.5" />{d}</li>
+                        ))}</ul>
                       </div>
                     )}
-
                     {aiResult.data.procedural_guidance && (
                       <div className="bg-white rounded-xl p-5 border border-violet-100">
-                        <h4 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
-                          🛣️ Procedural Guidance
-                        </h4>
+                        <h4 className="font-semibold text-slate-800 mb-3">Procedural Guidance</h4>
                         <p className="text-slate-700 whitespace-pre-line">{aiResult.data.procedural_guidance}</p>
                       </div>
                     )}
-
-                    {aiResult.data.recommended_actions && aiResult.data.recommended_actions.length > 0 && (
-                      <div className="bg-white rounded-xl p-5 border border-violet-100">
-                        <h4 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
-                          ✅ Recommended Actions
-                        </h4>
-                        <ul className="space-y-2">
-                          {aiResult.data.recommended_actions.map((action, idx) => (
-                            <li key={idx} className="flex items-start gap-2 text-slate-700">
-                              <span className="text-blue-600 font-bold">{idx + 1}.</span>
-                              <span>{action}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {aiResult.data.estimated_timeline && (
-                      <div className="bg-white rounded-xl p-5 border border-violet-100">
-                        <h4 className="font-semibold text-slate-800 mb-2 flex items-center gap-2">
-                          ⏱️ Estimated Timeline
-                        </h4>
-                        <p className="text-slate-700">{aiResult.data.estimated_timeline}</p>
-                      </div>
-                    )}
-
-                    {aiResult.data.important_notes && (
-                      <div className="bg-amber-50 rounded-xl p-5 border border-amber-200">
-                        <h4 className="font-semibold text-amber-800 mb-3 flex items-center gap-2">
-                          ⚠️ Important Notes
-                        </h4>
-                        {Array.isArray(aiResult.data.important_notes) ? (
-                          <ul className="space-y-2">
-                            {aiResult.data.important_notes.map((note, idx) => (
-                              <li key={idx} className="flex items-start gap-2 text-amber-900">
-                                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                                <span>{note}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <p className="text-amber-900">{aiResult.data.important_notes}</p>
-                        )}
-                      </div>
-                    )}
-
-                    <div className="flex gap-4 pt-4">
-                      <Button 
-                        variant="outline" 
-                        onClick={() => {
-                          setAIResult(null);
-                          setRecommendedAdvocates([]);
-                        }}
-                        className="flex-1"
-                      >
-                        Start New Query
-                      </Button>
-                    </div>
+                    <Button variant="outline" onClick={() => { setAIResult(null); setRecommendedAdvocates([]); }} className="w-full">Start New Query</Button>
                   </div>
                 ) : (
                   <div className="text-center py-8">
-                    <p className="text-slate-600">No analysis data available. Please try again.</p>
-                    <Button 
-                      variant="outline" 
-                      onClick={() => {
-                        setAIResult(null);
-                        setRecommendedAdvocates([]);
-                      }}
-                      className="mt-4"
-                    >
-                      Start New Query
-                    </Button>
+                    <p className="text-slate-600">No analysis data available.</p>
+                    <Button variant="outline" onClick={() => { setAIResult(null); setRecommendedAdvocates([]); }} className="mt-4">Start New Query</Button>
                   </div>
                 )}
               </div>
-
               {recommendedAdvocates.length > 0 && (
                 <div>
                   <h3 className="font-semibold text-slate-900 mb-6 flex items-center gap-2">
@@ -687,23 +671,13 @@ const ClientDashboard = () => {
                   </h3>
                   <div className="space-y-4">
                     {recommendedAdvocates.map((adv) => (
-                      <Card key={adv.id} className="p-6 hover:shadow-lg transition-all border-slate-200">
+                      <Card key={adv.id} className="p-6 hover:shadow-lg transition-all">
                         <div className="flex justify-between items-start">
                           <div className="flex-1">
                             <h4 className="font-semibold text-xl text-slate-900 mb-1">{adv.user?.full_name || 'Advocate'}</h4>
-                            <div className="space-y-1 text-sm text-slate-600">
-                              <p>📍 {adv.location}</p>
-                              <p>💼 {adv.experience_years} years experience</p>
-                              <p>⭐ Rating: {adv.rating}/5.0 • {adv.total_cases} cases handled</p>
-                              {adv.specialization && (
-                                <p>🎯 Specialization: {adv.specialization.map(s => formatCaseType(s)).join(', ')}</p>
-                              )}
-                            </div>
+                            <p className="text-sm text-slate-600">{adv.location} &bull; {adv.experience_years} yrs &bull; Rating: {adv.rating}/5.0</p>
                           </div>
-                          <Button 
-                            onClick={() => handleRequestMeeting(adv)} 
-                            className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 ml-4"
-                          >
+                          <Button onClick={() => handleRequestMeeting(adv)} className="bg-gradient-to-r from-violet-600 to-purple-600 ml-4">
                             Request Meeting
                           </Button>
                         </div>
@@ -717,9 +691,9 @@ const ClientDashboard = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Meeting Request Confirmation Dialog */}
+      {/* Meeting Request Confirmation */}
       <Dialog open={showMeetingRequest} onOpenChange={setShowMeetingRequest}>
-        <DialogContent className="bg-white border-slate-200 rounded-3xl">
+        <DialogContent className="bg-white border-slate-200 rounded-3xl" data-testid="meeting-request-dialog">
           <DialogHeader>
             <DialogTitle>Confirm Meeting Request</DialogTitle>
             <DialogDescription>Send request to {selectedAdvocate?.user?.full_name}?</DialogDescription>

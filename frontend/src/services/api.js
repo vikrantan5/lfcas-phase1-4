@@ -138,4 +138,24 @@ export const adminAPI = {
   getLogs: (params) => api.get('/admin/logs', { params }),
 };
 
+
+
+// Payment APIs
+export const paymentAPI = {
+  // Advocate payment settings
+  saveSettings: (data) => api.post('/payments/settings', data),
+  getSettings: () => api.get('/payments/settings'),
+  
+  // Payment requests
+  createRequest: (data) => api.post('/payments/request', data),
+  getRequests: (params) => api.get('/payments/requests', { params }),
+  getRequestById: (id) => api.get(`/payments/requests/${id}`),
+  
+  // Payment verification
+  verify: (data) => api.post('/payments/verify', data),
+  
+  // Advocate key lookup for clients
+  getAdvocateKey: (advocateId) => api.get(`/payments/advocate-key/${advocateId}`),
+};
+
 export default api;

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { caseAPI } from '../../services/api';
+import { paymentAPI } from '../../services/api';
 import Sidebar from '../../components/advocate/Sidebar';
 import DashboardHeader from '../../components/advocate/DashboardHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -22,9 +22,9 @@ const Payments = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [timeFilter, setTimeFilter] = useState('all');
 
-  // Mock payment data - In real app, this would come from backend
   const [payments, setPayments] = useState([]);
   const [filteredPayments, setFilteredPayments] = useState([]);
+  const [paymentRequests, setPaymentRequests] = useState([]);
 
   useEffect(() => {
     loadPaymentData();
@@ -38,32 +38,28 @@ const Payments = () => {
     try {
       setLoading(true);
       
-      // Get cases for this advocate
-      const casesResponse = await caseAPI.list();
-      const cases = casesResponse.data || [];
+      // Get real payment requests from backend
+      const response = await paymentAPI.getRequests();
+      const requests = response.data || [];
+      
+      // Convert payment requests to payment format for display
+      const paymentData = requests.map((request) => ({
+        id: request.id,
+        case_id: request.case_id,
+        case_title: request.case?.title || 'Case Payment',
+        client_name: request.client?.full_name || 'Client',
+        amount: request.amount,
+        status: request.status,
+        due_date: request.due_date,
+        paid_date: request.status === 'paid' ? request.updated_at : null,
+        payment_method: 'Razorpay',
+        invoice_number: `INV-${new Date(request.created_at).getFullYear()}${request.id.substring(0, 4).toUpperCase()}`,
+        description: request.description,
+        created_at: request.created_at
+      }));
 
-      // Generate mock payment data based on cases
-      const mockPayments = cases.flatMap((caseItem, index) => {
-        const baseAmount = 15000 + (index * 5000);
-        return [
-          {
-            id: `pay-${caseItem.id}-1`,
-            case_id: caseItem.id,
-            case_title: caseItem.title,
-            client_name: caseItem.client?.full_name || 'Client Name',
-            amount: baseAmount,
-            status: index % 3 === 0 ? 'paid' : index % 3 === 1 ? 'pending' : 'overdue',
-            due_date: new Date(Date.now() + (index - 2) * 7 * 24 * 60 * 60 * 1000).toISOString(),
-            paid_date: index % 3 === 0 ? new Date(Date.now() - index * 2 * 24 * 60 * 60 * 1000).toISOString() : null,
-            payment_method: 'Bank Transfer',
-            invoice_number: `INV-${2026}${String(index + 1).padStart(4, '0')}`,
-            description: 'Legal consultation and case handling fees',
-            created_at: new Date(Date.now() - index * 10 * 24 * 60 * 60 * 1000).toISOString()
-          }
-        ];
-      });
-
-      setPayments(mockPayments.slice(0, 15)); // Limit to 15 for demo
+      setPayments(paymentData);
+      setPaymentRequests(requests);
     } catch (error) {
       console.error('Failed to load payment data:', error);
       toast({
@@ -122,21 +118,21 @@ const Payments = () => {
       .filter(p => p.status === 'pending')
       .reduce((sum, p) => sum + p.amount, 0);
     
-    const overdueAmount = payments
-      .filter(p => p.status === 'overdue')
+    const failedAmount = payments
+      .filter(p => p.status === 'failed')
       .reduce((sum, p) => sum + p.amount, 0);
 
     const paidCount = payments.filter(p => p.status === 'paid').length;
     const pendingCount = payments.filter(p => p.status === 'pending').length;
-    const overdueCount = payments.filter(p => p.status === 'overdue').length;
+    const failedCount = payments.filter(p => p.status === 'failed').length;
 
     return {
       totalEarned,
       pendingAmount,
-      overdueAmount,
+      overdueAmount: failedAmount,
       paidCount,
       pendingCount,
-      overdueCount
+      overdueCount: failedCount
     };
   };
 
@@ -163,7 +159,8 @@ const Payments = () => {
     const statusConfig = {
       paid: { color: '#18B057', bg: '#E8F5EE', icon: CheckCircle, label: 'Paid' },
       pending: { color: '#F59E0B', bg: '#FFF7ED', icon: Clock, label: 'Pending' },
-      overdue: { color: '#EF4444', bg: '#FEE2E2', icon: Clock, label: 'Overdue' }
+      failed: { color: '#EF4444', bg: '#FEE2E2', icon: Clock, label: 'Failed' },
+      refunded: { color: '#6B7280', bg: '#F3F4F6', icon: Clock, label: 'Refunded' }
     };
 
     const config = statusConfig[status] || statusConfig.pending;
@@ -192,7 +189,7 @@ const Payments = () => {
       <div className="advocate-dashboard">
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} userName={user?.full_name} />
         <div className="adv-main">
-          <DashboardHeader userName={user?.full_name} onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
+          <DashboardHeader userName={user?.full_name} onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
           <div className="adv-content" style={{ padding: '24px', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
             <Loader2 className="animate-spin" size={48} color="#724AE3" />
           </div>
@@ -206,7 +203,7 @@ const Payments = () => {
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} userName={user?.full_name} />
       
       <div className="adv-main">
-        <DashboardHeader userName={user?.full_name} onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
+        <DashboardHeader userName={user?.full_name} onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
         
         <div className="adv-content" style={{ padding: '24px' }}>
           {/* Page Header */}
@@ -364,7 +361,7 @@ const Payments = () => {
                   <option value="all">All Status</option>
                   <option value="paid">Paid</option>
                   <option value="pending">Pending</option>
-                  <option value="overdue">Overdue</option>
+                  <option value="failed">Failed</option>
                 </select>
                 <select
                   value={timeFilter}

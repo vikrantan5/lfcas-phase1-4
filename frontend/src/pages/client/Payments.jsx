@@ -9,7 +9,7 @@ import {
   Calendar, CreditCard, FileText, Download, ExternalLink
 } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
-import axios from 'axios';
+import { paymentAPI } from '../../services/api';
 import '../../styles/client-dashboard.css';
 
 const Payments = () => {
@@ -37,11 +37,7 @@ const Payments = () => {
   const loadPaymentRequests = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('access_token');
-      const response = await axios.get(
-        `${process.env.REACT_APP_BACKEND_URL}/api/payments/requests`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await paymentAPI.getRequests();
       setPaymentRequests(response.data || []);
     } catch (error) {
       console.error('Failed to load payment requests:', error);
@@ -68,14 +64,12 @@ const Payments = () => {
     setPaying(paymentRequest.id);
 
     try {
-      // Get advocate's Razorpay key (we need to fetch this)
-      const advocateId = paymentRequest.advocate_id;
-      
-      // For now, we'll use the order_id from the payment request
-      // The advocate's public key should be fetched from backend
+      // Get advocate's Razorpay public key
+      const keyResponse = await paymentAPI.getAdvocateKey(paymentRequest.advocate_id);
+      const advocateKey = keyResponse.data.razorpay_key_id;
       
       const options = {
-        key: paymentRequest.advocate?.razorpay_key_id || 'rzp_test_XXXXXXXXX', // This should come from backend
+        key: advocateKey,
         amount: paymentRequest.amount * 100, // Amount in paise
         currency: 'INR',
         name: 'LFCAS Payment',
@@ -84,17 +78,12 @@ const Payments = () => {
         handler: async function (response) {
           // Payment successful, verify on backend
           try {
-            const token = localStorage.getItem('access_token');
-            await axios.post(
-              `${process.env.REACT_APP_BACKEND_URL}/api/payments/verify`,
-              {
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-                payment_request_id: paymentRequest.id
-              },
-              { headers: { Authorization: `Bearer ${token}` } }
-            );
+            await paymentAPI.verify({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              payment_request_id: paymentRequest.id
+            });
 
             toast({
               title: "Payment Successful",

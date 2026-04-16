@@ -11,6 +11,15 @@ import ClientDashboard from './pages/client/ClientDashboard';
 import CaseDetailPage from './pages/client/CaseDetail';
 import AdvocateDashboard from './pages/advocate/AdvocateDashboard';
 import AdvocateCaseDetail from './pages/advocate/AdvocateCaseDetail';
+import MyCases from './pages/advocate/MyCases';
+import CaseTracker from './pages/advocate/CaseTracker';
+import Calendar from './pages/advocate/Calendar';
+import Requests from './pages/advocate/Requests';
+import Documents from './pages/advocate/Documents';
+import Payments from './pages/advocate/Payments';
+import Messages from './pages/advocate/Messages';
+import FindClients from './pages/advocate/FindClients';
+import Settings from './pages/advocate/Settings';
 import ManagerDashboard from './pages/manager/ManagerDashboard';
 import VoiceAssistantButton from './components/VoiceAssistantButton';
 import VoiceAssistantModal from './components/VoiceAssistantModal';
@@ -108,11 +117,83 @@ function App() {
                   </ProtectedRoute>
                 }
               />
+                <Route
+                path="/advocate/cases"
+                element={
+                  <ProtectedRoute allowedRoles={['advocate']}>
+                    <MyCases />
+                  </ProtectedRoute>
+                }
+              />
               <Route
                 path="/advocate/cases/:caseId"
                 element={
                   <ProtectedRoute allowedRoles={['advocate']}>
                     <AdvocateCaseDetail />
+                  </ProtectedRoute>
+                }
+              />
+                 <Route
+                path="/advocate/case-tracker"
+                element={
+                  <ProtectedRoute allowedRoles={['advocate']}>
+                    <CaseTracker />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/advocate/calendar"
+                element={
+                  <ProtectedRoute allowedRoles={['advocate']}>
+                    <Calendar />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/advocate/requests"
+                element={
+                  <ProtectedRoute allowedRoles={['advocate']}>
+                    <Requests />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/advocate/documents"
+                element={
+                  <ProtectedRoute allowedRoles={['advocate']}>
+                    <Documents />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/advocate/payments"
+                element={
+                  <ProtectedRoute allowedRoles={['advocate']}>
+                    <Payments />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/advocate/messages"
+                element={
+                  <ProtectedRoute allowedRoles={['advocate']}>
+                    <Messages />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route
+                path="/advocate/find-clients"
+                element={
+                  <ProtectedRoute allowedRoles={['advocate']}>
+                    <FindClients />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/advocate/settings"
+                element={
+                  <ProtectedRoute allowedRoles={['advocate']}>
+                    <Settings />
                   </ProtectedRoute>
                 }
               />

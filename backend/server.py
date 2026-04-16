@@ -2452,23 +2452,59 @@ async def get_next_question(
                 "content": user_message
             })
         
+        # Count user responses (excluding greeting)
+        user_responses = len([msg for msg in conversation_history if msg["role"] == "user"])
+        
         # Determine next question based on conversation stage
         from groq import Groq
         groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
         
-        system_prompt = f"""You are an empathetic AI legal assistant helping with family law cases in India. 
-Language: {language}
-Your role is to ask ONE focused follow-up question at a time to understand the user's legal problem.
+        # Enhanced system prompt with structured conversation flow
+        lang_instructions = {
+            "english": "Respond ONLY in English",
+            "hindi": "केवल हिंदी में जवाब दें। कोई अंग्रेजी शब्द न इस्तेमाल करें।",
+            "bengali": "শুধুমাত্র বাংলায় উত্তর দিন"
+        }
+        
+        system_prompt = f"""You are an empathetic AI legal assistant specializing in Indian family law. 
+IMPORTANT: {lang_instructions.get(language, 'Respond in English')}
 
-Ask about:
-1. Type of case (divorce, custody, alimony, dowry, domestic violence)
-2. Location (city/state)
-3. Duration of the problem
-4. Urgency level
-5. Documents available
+Your task is to conduct a thorough legal consultation by asking ONE specific follow-up question at a time.
 
-Keep questions short, empathetic, and in {language} language.
-After gathering enough information (5-6 exchanges), respond with "READY_TO_ANALYZE" to indicate you have sufficient information."""
+CONVERSATION STAGES (ask in this order):
+1. First Response: Acknowledge their problem and ask about the SPECIFIC TYPE of case (divorce/तलाक, child custody/बच्चे की हिरासत, alimony/गुजारा भत्ता, dowry harassment/दहेज उत्पीड़न, domestic violence/घरेलू हिंसा)
+
+2. Second Question: Ask about WHEN this problem started and DURATION (कब शुरू हुआ? कितने समय से?)
+
+3. Third Question: Ask about their LOCATION (city/district) - महत्वपूर्ण: शहर या जिला बताएं
+
+4. Fourth Question: Ask about OTHER PARTY details (spouse/husband/wife name, their behavior) - दूसरे पक्ष के बारे में
+
+5. Fifth Question: Ask about EVIDENCE/DOCUMENTS they have (proofs, certificates, complaints) - क्या आपके पास सबूत/दस्तावेज हैं?
+
+6. Sixth Question: Ask about URGENCY and IMMEDIATE CONCERNS - कितनी जरूरी है? क्या तत्काल खतरा है?
+
+CURRENT USER RESPONSES COUNT: {user_responses}
+
+RULES:
+- Ask ONLY ONE question per response
+- Be empathetic and culturally sensitive
+- Use simple language
+- After 6 user responses, say "READY_TO_ANALYZE" at the end
+- DO NOT skip questions - ask each one systematically
+- DO NOT summarize - only ask the next question
+
+Example flow in Hindi:
+User: "मेरी शादी में बहुत परेशानी है"
+Assistant: "मैं समझ सकता हूं यह मुश्किल समय है। क्या यह तलाक, बच्चे की हिरासत, गुजारा भत्ता, दहेज उत्पीड़न, या घरेलू हिंसा से संबंधित है?"
+
+User: "तलाक चाहिए"  
+Assistant: "समझा। यह समस्या कब शुरू हुई और कितने समय से चल रही है?"
+
+User: "2 साल से"
+Assistant: "ठीक है। आप किस शहर या जिले में रहते हैं? इससे मुझे स्थानीय वकील सुझाने में मदद मिलेगी।"
+
+Now analyze the conversation history and ask the NEXT appropriate question."""
         
         messages_for_groq = [{"role": "system", "content": system_prompt}] + conversation_history
         
@@ -2476,19 +2512,29 @@ After gathering enough information (5-6 exchanges), respond with "READY_TO_ANALY
             model="llama-3.3-70b-versatile",
             messages=messages_for_groq,
             temperature=0.7,
-            max_tokens=200
+            max_tokens=300
         )
         
         next_question = response.choices[0].message.content
         
         # Check if AI thinks we have enough information
-        ready_to_analyze = "READY_TO_ANALYZE" in next_question
+        ready_to_analyze = "READY_TO_ANALYZE" in next_question or user_responses >= 6
+        
         if ready_to_analyze:
-            next_question = {
-                "english": "Thank you for sharing your situation. I now have enough information to analyze your case. Please click 'Finish & Analyze' to proceed.",
-                "hindi": "आपकी स्थिति साझा करने के लिए धन्यवाद। मेरे पास अब आपके मामले का विश्लेषण करने के लिए पर्याप्त जानकारी है। जारी रखने के लिए कृपया 'समाप्त करें और विश्लेषण करें' पर क्लिक करें।",
-                "bengali": "আপনার পরিস্থিতি শেয়ার করার জন্য ধন্যবাদ। আপনার মামলা বিশ্লেষণ করার জন্য আমার কাছে এখন যথেষ্ট তথ্য আছে। এগিয়ে যেতে 'শেষ করুন এবং বিশ্লেষণ করুন' এ ক্লিক করুন।"
-            }.get(language, next_question)
+            # Remove the READY_TO_ANALYZE marker if present
+            next_question = next_question.replace("READY_TO_ANALYZE", "").strip()
+            
+            # Add completion message
+            completion_msg = {
+                "english": "Thank you for sharing all the details. I now have enough information to analyze your case thoroughly. Please click 'Finish & Analyze' to see detailed legal insights, applicable sections, and recommended advocates.",
+                "hindi": "सभी विवरण साझा करने के लिए धन्यवाद। अब मेरे पास आपके मामले का गहन विश्लेषण करने के लिए पर्याप्त जानकारी है। विस्तृत कानूनी जानकारी, लागू धाराएं और अनुशंसित वकील देखने के लिए कृपया 'समाप्त करें और विश्लेषण करें' पर क्लिक करें।",
+                "bengali": "সমস্ত বিবরণ শেয়ার করার জন্য ধন্যবাদ। এখন আমার কাছে আপনার মামলার পুঙ্খানুপুঙ্খ বিশ্লেষণ করার জন্য যথেষ্ট তথ্য আছে। বিস্তারিত আইনি অন্তর্দৃষ্টি, প্রযোজ্য ধারা এবং প্রস্তাবিত আইনজীবী দেখতে 'শেষ করুন এবং বিশ্লেষণ করুন' এ ক্লিক করুন।"
+            }.get(language, "")
+            
+            if next_question:
+                next_question += completion_msg
+            else:
+                next_question = completion_msg.strip()
         
         return {
             "success": True,
@@ -2498,13 +2544,18 @@ After gathering enough information (5-6 exchanges), respond with "READY_TO_ANALY
         
     except Exception as e:
         logger.error(f"Error getting next question: {str(e)}")
+        fallback_msg = {
+            "english": "Could you please provide more details about your situation?",
+            "hindi": "क्या आप अपनी स्थिति के बारे में अधिक विवरण दे सकते हैं?",
+            "bengali": "আপনি কি আপনার পরিস্থিতি সম্পর্কে আরও বিস্তারিত জানাতে পারেন?"
+        }.get(language, "Could you please provide more details about your situation?")
+        
         return {
             "success": False,
-            "next_question": "Could you please provide more details about your situation?",
+            "next_question": fallback_msg,
             "ready_to_analyze": False
         }
     
-
 @api_router.post("/voice/process-conversation")
 async def process_voice_conversation(
     request: ProcessVoiceConversationRequest,

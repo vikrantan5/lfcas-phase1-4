@@ -9,11 +9,16 @@ import '@/styles/voice-button.css';
 
 const VoiceAssistantButton = () => {
   const { setIsOpen } = useVoice();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const location = useLocation();
 
-  // Hide button on case detail pages (messaging view) and when not authenticated
+  // Hide button when:
+  // 1. Not authenticated
+  // 2. User is not a client (only show for clients, not advocates or admins)
+  // 3. On case detail pages (messaging view)
+  // 4. On login/register pages
   const shouldHideButton = !isAuthenticated || 
+    (user && user.role !== 'client') ||
     location.pathname.includes('/cases/') ||
     location.pathname === '/login' ||
     location.pathname === '/register';
@@ -21,7 +26,6 @@ const VoiceAssistantButton = () => {
   if (shouldHideButton) {
     return null;
   }
-
   return (
     <motion.button
       data-testid="voice-assistant-button"

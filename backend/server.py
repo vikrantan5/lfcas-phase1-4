@@ -2293,29 +2293,14 @@ async def start_voice_session(
     session_data: VoiceSessionCreate,
     current_user: dict = Depends(get_current_user)
 ):
-    """Start a new voice AI session using existing Vapi assistant"""
+    """Start a new voice AI session using Web Speech API (browser-based)"""
     try:
-        vapi_service = get_vapi_service()
+        logger.info(f"Starting Web Speech session with language: {session_data.language}")
         
-        # Get existing assistant ID (multilingual assistant)
-        logger.info(f"Starting session with language: {session_data.language}")
-        assistant_result = vapi_service.get_assistant_id(language=session_data.language)
-        
-        if not assistant_result["success"]:
-            logger.error(f"Failed to get assistant ID: {assistant_result.get('error')}")
-            raise HTTPException(
-                status_code=500, 
-                detail=f"Failed to initialize AI assistant: {assistant_result.get('error', 'Unknown error')}"
-            )
-        
-        assistant_id = assistant_result["assistant_id"]
-        logger.info(f"Using Vapi assistant: {assistant_id}")
-        
-        # Create voice session in database with assistant ID
+        # Create voice session in database (no Vapi needed)
         session = {
             "user_id": current_user["user_id"],
             "language": session_data.language,
-            "vapi_assistant_id": assistant_id,
             "status": "initiated"
         }
         
@@ -2342,7 +2327,7 @@ async def start_voice_session(
         }
         supabase.table('voice_messages').insert(greeting_msg).execute()
         
-        # Return session with assistant ID for frontend to start call
+        # Return session (frontend will use Web Speech API for STT/TTS)
         session_response = result.data[0]
         return VoiceSessionResponse(**session_response)
         
@@ -2386,6 +2371,91 @@ async def save_voice_message(
         logger.error(f"Error saving voice message: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+
+
+
+@api_router.post("/voice/get-next-question")
+async def get_next_question(
+    request: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get AI-driven next question based on conversation history"""
+    try:
+        session_id = request.get("session_id")
+        user_message = request.get("user_message", "")
+        language = request.get("language", "english")
+        
+        # Get all messages in this session
+        messages = supabase.table('voice_messages').select('*').eq('session_id', session_id).order('created_at').execute()
+        
+        # Build conversation context
+        conversation_history = []
+        for msg in messages.data:
+            conversation_history.append({
+                "role": "user" if msg["sender"] == "user" else "assistant",
+                "content": msg["message"]
+            })
+        
+        # Add current user message
+        if user_message:
+            conversation_history.append({
+                "role": "user",
+                "content": user_message
+            })
+        
+        # Determine next question based on conversation stage
+        from groq import Groq
+        groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+        
+        system_prompt = f"""You are an empathetic AI legal assistant helping with family law cases in India. 
+Language: {language}
+Your role is to ask ONE focused follow-up question at a time to understand the user's legal problem.
+
+Ask about:
+1. Type of case (divorce, custody, alimony, dowry, domestic violence)
+2. Location (city/state)
+3. Duration of the problem
+4. Urgency level
+5. Documents available
+
+Keep questions short, empathetic, and in {language} language.
+After gathering enough information (5-6 exchanges), respond with "READY_TO_ANALYZE" to indicate you have sufficient information."""
+        
+        messages_for_groq = [{"role": "system", "content": system_prompt}] + conversation_history
+        
+        response = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=messages_for_groq,
+            temperature=0.7,
+            max_tokens=200
+        )
+        
+        next_question = response.choices[0].message.content
+        
+        # Check if AI thinks we have enough information
+        ready_to_analyze = "READY_TO_ANALYZE" in next_question
+        if ready_to_analyze:
+            next_question = {
+                "english": "Thank you for sharing your situation. I now have enough information to analyze your case. Please click 'Finish & Analyze' to proceed.",
+                "hindi": "आपकी स्थिति साझा करने के लिए धन्यवाद। मेरे पास अब आपके मामले का विश्लेषण करने के लिए पर्याप्त जानकारी है। जारी रखने के लिए कृपया 'समाप्त करें और विश्लेषण करें' पर क्लिक करें।",
+                "bengali": "আপনার পরিস্থিতি শেয়ার করার জন্য ধন্যবাদ। আপনার মামলা বিশ্লেষণ করার জন্য আমার কাছে এখন যথেষ্ট তথ্য আছে। এগিয়ে যেতে 'শেষ করুন এবং বিশ্লেষণ করুন' এ ক্লিক করুন।"
+            }.get(language, next_question)
+        
+        return {
+            "success": True,
+            "next_question": next_question,
+            "ready_to_analyze": ready_to_analyze
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting next question: {str(e)}")
+        return {
+            "success": False,
+            "next_question": "Could you please provide more details about your situation?",
+            "ready_to_analyze": False
+        }
+    
 
 @api_router.post("/voice/process-conversation")
 async def process_voice_conversation(

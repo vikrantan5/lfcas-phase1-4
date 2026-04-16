@@ -1,11 +1,9 @@
-// Voice Assistant Context for Managing State with Vapi Integration
+// Voice Assistant Context with Web Speech API (STT + TTS)
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import axios from 'axios';
-import Vapi from '@vapi-ai/web';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
-const VAPI_PUBLIC_KEY = process.env.REACT_APP_VAPI_PUBLIC_KEY || '7cb3571b-a339-421c-96ab-c399521ad924'; // Your Vapi API key
 
 const VoiceContext = createContext();
 
@@ -27,131 +25,259 @@ export const VoiceProvider = ({ children }) => {
   const [caseDraft, setCaseDraft] = useState(null);
   const [recommendedAdvocates, setRecommendedAdvocates] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [vapiCallActive, setVapiCallActive] = useState(false);
-  const [fullTranscript, setFullTranscript] = useState('');
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isAISpeaking, setIsAISpeaking] = useState(false);
+  const [currentTranscript, setCurrentTranscript] = useState('');
+  const [fullTranscript, setFullTranscript] = useState('');
+  const [error, setError] = useState(null);
+  const [browserSupported, setBrowserSupported] = useState(true);
+  const [readyToAnalyze, setReadyToAnalyze] = useState(false);
   
-  const vapiRef = useRef(null);
+  const recognitionRef = useRef(null);
+  const synthesisRef = useRef(null);
+  const speechQueueRef = useRef([]);
+  const isListeningRef = useRef(false);
 
-  // Initialize Vapi on mount
+  // Check browser support on mount
   useEffect(() => {
-    console.log('Initializing Vapi with public key:', VAPI_PUBLIC_KEY);
-    vapiRef.current = new Vapi(VAPI_PUBLIC_KEY);
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const speechSynthesis = window.speechSynthesis;
     
-    // Set up Vapi event listeners
-    vapiRef.current.on('call-start', () => {
-      console.log('✅ Vapi call started');
-      setVapiCallActive(true);
-      setIsRecording(true);
-    });
-
-    vapiRef.current.on('call-end', () => {
-      console.log('❌ Vapi call ended');
-      setVapiCallActive(false);
-      setIsRecording(false);
-      setIsSpeaking(false);
-    });
-
-    vapiRef.current.on('speech-start', () => {
-      console.log('🎤 User started speaking');
-      setIsSpeaking(true);
-    });
-
-    vapiRef.current.on('speech-end', () => {
-      console.log('🎤 User stopped speaking');
-      setIsSpeaking(false);
-    });
-
-    vapiRef.current.on('message', (message) => {
-      console.log('📨 Vapi message:', message);
-      
-      // Handle different message types
-      if (message.type === 'transcript' && message.transcriptType === 'final') {
-        const text = message.transcript;
-        const sender = message.role === 'user' ? 'user' : 'ai';
-        
-        console.log(`💬 ${sender}: ${text}`);
-        
-        // Add message to chat
-        setMessages(prev => [...prev, {
-          sender,
-          message: text,
-          timestamp: new Date()
-        }]);
-        
-        // Update full transcript with user messages
-        if (sender === 'user') {
-          setFullTranscript(prev => (prev + ' ' + text).trim());
-        }
-        
-        // Save to backend
-        if (session) {
-          saveMessageToBackend(sender, text);
-        }
-      }
-      
-      // Handle function calls from Vapi
-      if (message.type === 'function-call') {
-        console.log('📞 Function call:', message.functionCall);
-      }
-    });
-
-    vapiRef.current.on('error', (error) => {
-      console.error('❌ Vapi error:', error);
-      setVapiCallActive(false);
-      setIsRecording(false);
-    });
-
-    vapiRef.current.on('volume-level', (volume) => {
-      // You can use this for visual feedback
-      // console.log('Volume level:', volume);
-    });
-
-    return () => {
-      if (vapiRef.current && vapiCallActive) {
-        vapiRef.current.stop();
-      }
-    };
+    if (!SpeechRecognition || !speechSynthesis) {
+      setBrowserSupported(false);
+      console.warn('Web Speech API not supported in this browser');
+    } else {
+      console.log('✅ Web Speech API supported');
+    }
   }, []);
 
-  const saveMessageToBackend = async (sender, message) => {
-    if (!session) return;
+  // Initialize Speech Recognition
+  const initSpeechRecognition = useCallback((selectedLanguage) => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     
+    if (!SpeechRecognition) {
+      setError('Your browser does not support speech recognition. Please use Chrome or Edge.');
+      return null;
+    }
+
+    const recognition = new SpeechRecognition();
+    
+    // Language mapping
+    const langMap = {
+      'english': 'en-IN',
+      'hindi': 'hi-IN',
+      'bengali': 'bn-IN'
+    };
+    
+    recognition.lang = langMap[selectedLanguage] || 'en-IN';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      console.log('🎤 Speech recognition started');
+      setIsRecording(true);
+      setIsSpeaking(false);
+      setError(null);
+    };
+
+    recognition.onresult = (event) => {
+      let interimTranscript = '';
+      let finalTranscript = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript + ' ';
+        } else {
+          interimTranscript += transcript;
+        }
+      }
+
+      if (interimTranscript) {
+        setCurrentTranscript(interimTranscript);
+        setIsSpeaking(true);
+      }
+
+      if (finalTranscript) {
+        console.log('📝 Final transcript:', finalTranscript);
+        setIsSpeaking(false);
+        handleUserSpeech(finalTranscript.trim());
+      }
+    };
+
+    recognition.onerror = (event) => {
+      console.error('❌ Speech recognition error:', event.error);
+      
+      if (event.error === 'no-speech') {
+        console.log('No speech detected, continuing...');
+        return;
+      }
+      
+      if (event.error === 'not-allowed') {
+        setError('Microphone access denied. Please allow microphone access.');
+        setIsRecording(false);
+      } else if (event.error === 'network') {
+        setError('Network error. Please check your connection.');
+      }
+    };
+
+    recognition.onend = () => {
+      console.log('🎤 Speech recognition ended');
+      // Auto-restart if still in recording mode
+      if (isListeningRef.current && session) {
+        console.log('🔄 Restarting speech recognition...');
+        try {
+          recognition.start();
+        } catch (e) {
+          console.log('Recognition restart failed:', e);
+        }
+      } else {
+        setIsRecording(false);
+      }
+    };
+
+    return recognition;
+  }, [session]);
+
+  // Handle user speech - save and get AI response
+  const handleUserSpeech = async (transcript) => {
+    if (!session || !transcript) return;
+
     try {
+      // Add user message to UI immediately
+      const userMsg = {
+        sender: 'user',
+        message: transcript,
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, userMsg]);
+      setCurrentTranscript('');
+      setFullTranscript(prev => (prev + ' ' + transcript).trim());
+
+      // Save user message to backend
       const token = localStorage.getItem('token');
       await axios.post(
         `${API}/voice/save-message`,
         {
           session_id: session.id,
-          sender,
-          message,
+          sender: 'user',
+          message: transcript,
           message_type: 'text'
         },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+        { headers: { Authorization: `Bearer ${token}` } }
       );
+
+      // Get AI's next question
+      const response = await axios.post(
+        `${API}/voice/get-next-question`,
+        {
+          session_id: session.id,
+          user_message: transcript,
+          language
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (response.data.success) {
+        const aiResponse = response.data.next_question;
+        const ready = response.data.ready_to_analyze;
+        
+        setReadyToAnalyze(ready);
+
+        // Add AI message to UI
+        const aiMsg = {
+          sender: 'ai',
+          message: aiResponse,
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, aiMsg]);
+
+        // Save AI message to backend
+        await axios.post(
+          `${API}/voice/save-message`,
+          {
+            session_id: session.id,
+            sender: 'ai',
+            message: aiResponse,
+            message_type: 'text'
+          },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        // Speak the AI response
+        speakText(aiResponse, language);
+      }
     } catch (error) {
-      console.error('Error saving message to backend:', error);
+      console.error('Error handling user speech:', error);
+      setError('Failed to process your message. Please try again.');
     }
   };
 
+  // Text-to-Speech function
+  const speakText = useCallback((text, lang) => {
+    if (!window.speechSynthesis) {
+      console.warn('Speech synthesis not supported');
+      return;
+    }
+
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    
+    // Language mapping for voices
+    const voiceLangMap = {
+      'english': 'en-IN',
+      'hindi': 'hi-IN',
+      'bengali': 'bn-IN'
+    };
+    utterance.lang = voiceLangMap[lang] || 'en-IN';
+    utterance.rate = 0.95;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+
+    // Get available voices and select the best one
+    const voices = window.speechSynthesis.getVoices();
+    const preferredVoice = voices.find(voice => voice.lang.startsWith(utterance.lang.split('-')[0]));
+    if (preferredVoice) {
+      utterance.voice = preferredVoice;
+    }
+
+    utterance.onstart = () => {
+      console.log('🔊 AI speaking...');
+      setIsAISpeaking(true);
+    };
+
+    utterance.onend = () => {
+      console.log('🔇 AI finished speaking');
+      setIsAISpeaking(false);
+    };
+
+    utterance.onerror = (event) => {
+      console.error('Speech synthesis error:', event);
+      setIsAISpeaking(false);
+    };
+
+    window.speechSynthesis.speak(utterance);
+  }, []);
+
+  // Start voice session
   const startSession = useCallback(async (selectedLanguage) => {
     try {
       console.log('🚀 Starting voice session with language:', selectedLanguage);
       const token = localStorage.getItem('token');
       
-      // Call backend to create session and Vapi assistant
+      if (!browserSupported) {
+        setError('Your browser does not support Web Speech API. Please use Chrome or Edge, or use the \"Type instead\" option.');
+        return null;
+      }
+
+      // Create session in backend
       const response = await axios.post(
         `${API}/voice/start-session`,
         { language: selectedLanguage },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+        { headers: { Authorization: `Bearer ${token}` } }
       );
       
       const sessionData = response.data;
@@ -161,59 +287,75 @@ export const VoiceProvider = ({ children }) => {
       setLanguage(selectedLanguage);
       setFullTranscript('');
       setMessages([]);
+      setReadyToAnalyze(false);
       
-      // Start Vapi call with the assistant ID
-      if (sessionData.vapi_assistant_id && vapiRef.current) {
-        try {
-          console.log('📞 Starting Vapi call with assistant:', sessionData.vapi_assistant_id);
-          await vapiRef.current.start(sessionData.vapi_assistant_id);
-          console.log('✅ Vapi call started successfully');
-        } catch (vapiError) {
-          console.error('❌ Error starting Vapi call:', vapiError);
-          throw new Error(`Failed to start voice call: ${vapiError.message}`);
-        }
-      } else {
-        throw new Error('No assistant ID received from backend');
+      // Get initial greeting message from backend
+      const messagesResponse = await axios.get(
+        `${API}/voice/session/${sessionData.id}/messages`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      if (messagesResponse.data && messagesResponse.data.length > 0) {
+        const greetingMsg = messagesResponse.data[0];
+        setMessages([{
+          sender: 'ai',
+          message: greetingMsg.message,
+          timestamp: new Date(greetingMsg.created_at)
+        }]);
+        
+        // Speak greeting
+        speakText(greetingMsg.message, selectedLanguage);
+      }
+      
+      // Initialize and start speech recognition
+      const recognition = initSpeechRecognition(selectedLanguage);
+      if (recognition) {
+        recognitionRef.current = recognition;
+        isListeningRef.current = true;
+        recognition.start();
       }
       
       return sessionData;
     } catch (error) {
       console.error('❌ Error starting session:', error);
+      setError(error.response?.data?.detail || 'Failed to start voice session');
       throw error;
+    }
+  }, [browserSupported, initSpeechRecognition, speakText]);
+
+  // Stop speech recognition
+  const stopRecording = useCallback(() => {
+    isListeningRef.current = false;
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+    setIsRecording(false);
+    setIsSpeaking(false);
+    console.log('⏹️ Recording stopped');
+  }, []);
+
+  // Resume speech recognition
+  const startRecording = useCallback(() => {
+    if (recognitionRef.current && session) {
+      isListeningRef.current = true;
+      try {
+        recognitionRef.current.start();
+        console.log('▶️ Recording resumed');
+      } catch (e) {
+        console.log('Already recording');
+      }
+    }
+  }, [session]);
+
+  // Stop TTS
+  const stopSpeaking = useCallback(() => {
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      setIsAISpeaking(false);
     }
   }, []);
 
-  const toggleRecording = useCallback(() => {
-    if (!vapiRef.current || !vapiCallActive) {
-      console.warn('Cannot toggle recording: Vapi call not active');
-      return;
-    }
-    
-    try {
-      // Toggle mute state
-      vapiRef.current.setMuted(!isRecording);
-      setIsRecording(!isRecording);
-      console.log(isRecording ? '🔇 Muted' : '🔊 Unmuted');
-    } catch (error) {
-      console.error('Error toggling recording:', error);
-    }
-  }, [vapiCallActive, isRecording]);
-
-  const stopVapiCall = useCallback(async () => {
-    if (vapiRef.current && vapiCallActive) {
-      try {
-        console.log('⏹️ Stopping Vapi call');
-        await vapiRef.current.stop();
-        setVapiCallActive(false);
-        setIsRecording(false);
-        setIsSpeaking(false);
-        console.log('✅ Vapi call stopped');
-      } catch (error) {
-        console.error('Error stopping Vapi call:', error);
-      }
-    }
-  }, [vapiCallActive]);
-
+  // Process conversation (final analysis)
   const processConversation = useCallback(async (conversationTranscript) => {
     if (!session) {
       throw new Error('No active session');
@@ -223,14 +365,15 @@ export const VoiceProvider = ({ children }) => {
       setIsProcessing(true);
       console.log('🔄 Processing conversation...');
       
-      // Stop Vapi call first
-      await stopVapiCall();
+      // Stop recording
+      stopRecording();
+      stopSpeaking();
       
       const token = localStorage.getItem('token');
       const transcript = conversationTranscript || fullTranscript;
       
       if (!transcript || transcript.trim().length === 0) {
-        throw new Error('No conversation to process. Please speak or type your problem first.');
+        throw new Error('No conversation to process. Please speak about your problem first.');
       }
       
       console.log('📝 Transcript to process:', transcript);
@@ -242,11 +385,7 @@ export const VoiceProvider = ({ children }) => {
           transcript: transcript,
           language
         },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+        { headers: { Authorization: `Bearer ${token}` } }
       );
       
       console.log('✅ Conversation processed:', response.data);
@@ -262,8 +401,9 @@ export const VoiceProvider = ({ children }) => {
     } finally {
       setIsProcessing(false);
     }
-  }, [session, language, fullTranscript, stopVapiCall]);
+  }, [session, language, fullTranscript, stopRecording, stopSpeaking]);
 
+  // Confirm draft
   const confirmDraft = useCallback(async (draftId, advocateId) => {
     try {
       const token = localStorage.getItem('token');
@@ -273,11 +413,7 @@ export const VoiceProvider = ({ children }) => {
           draft_id: draftId,
           selected_advocate_id: advocateId
         },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+        { headers: { Authorization: `Bearer ${token}` } }
       );
       
       return response.data;
@@ -287,20 +423,32 @@ export const VoiceProvider = ({ children }) => {
     }
   }, []);
 
-  const reset = useCallback(async () => {
+  // Reset everything
+  const reset = useCallback(() => {
     console.log('🔄 Resetting voice context');
-    await stopVapiCall();
+    stopRecording();
+    stopSpeaking();
     setSession(null);
     setMessages([]);
     setFullTranscript('');
+    setCurrentTranscript('');
     setAnalysis(null);
     setCaseDraft(null);
     setRecommendedAdvocates([]);
     setIsRecording(false);
     setIsProcessing(false);
-    setVapiCallActive(false);
     setIsSpeaking(false);
-  }, [stopVapiCall]);
+    setIsAISpeaking(false);
+    setError(null);
+    setReadyToAnalyze(false);
+  }, [stopRecording, stopSpeaking]);
+
+  // Manual text input (fallback)
+  const sendTextMessage = useCallback(async (text) => {
+    if (!session || !text) return;
+    
+    return handleUserSpeech(text);
+  }, [session]);
 
   const value = {
     isOpen,
@@ -310,20 +458,26 @@ export const VoiceProvider = ({ children }) => {
     language,
     setLanguage,
     isRecording,
-    setIsRecording,
+    isSpeaking,
+    isAISpeaking,
+    currentTranscript,
     analysis,
     caseDraft,
     recommendedAdvocates,
     isProcessing,
-    vapiCallActive,
-    isSpeaking,
+    fullTranscript,
+    error,
+    setError,
+    browserSupported,
+    readyToAnalyze,
     startSession,
-    toggleRecording,
-    stopVapiCall,
+    stopRecording,
+    startRecording,
+    stopSpeaking,
     processConversation,
     confirmDraft,
     reset,
-    fullTranscript
+    sendTextMessage
   };
 
   return <VoiceContext.Provider value={value}>{children}</VoiceContext.Provider>;

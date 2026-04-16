@@ -153,6 +153,109 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user)):
     return UserResponse(**user.data[0])
 
 
+
+
+# ============= PROFILE IMAGE ENDPOINTS =============
+@api_router.post("/users/profile-image")
+async def upload_profile_image(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Upload or update user profile image"""
+    try:
+        # Validate file type
+        if not file.content_type or not file.content_type.startswith('image/'):
+            raise HTTPException(status_code=400, detail="File must be an image")
+        
+        # Read file content
+        file_content = await file.read()
+        file_size = len(file_content)
+        
+        # Check file size (max 5MB)
+        if file_size > 5 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="File size must be less than 5MB")
+        
+        # Generate unique filename
+        file_extension = file.filename.split('.')[-1] if '.' in file.filename else 'jpg'
+        unique_filename = f"profile-images/{current_user['user_id']}.{file_extension}"
+        
+        # Delete old profile image if exists
+        try:
+            supabase.storage.from_('profile-images').remove([unique_filename])
+        except:
+            pass  # File might not exist
+        
+        # Upload to Supabase Storage
+        storage_response = supabase.storage.from_('profile-images').upload(
+            path=unique_filename,
+            file=file_content,
+            file_options={"content-type": file.content_type, "upsert": "true"}
+        )
+        
+        # Get public URL
+        public_url = supabase.storage.from_('profile-images').get_public_url(unique_filename)
+        
+        # Update user profile with image URL
+        supabase.table('users').update({
+            "profile_image_url": public_url
+        }).eq('id', current_user["user_id"]).execute()
+        
+        return {
+            "message": "Profile image uploaded successfully",
+            "image_url": public_url
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Profile image upload error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+
+@api_router.get("/users/{user_id}/profile-image")
+async def get_profile_image_url(user_id: str):
+    """Get user profile image URL"""
+    try:
+        user = supabase.table('users').select('profile_image_url').eq('id', user_id).execute()
+        if not user.data or len(user.data) == 0:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        return {
+            "image_url": user.data[0].get('profile_image_url')
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching profile image: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.delete("/users/profile-image")
+async def delete_profile_image(current_user: dict = Depends(get_current_user)):
+    """Delete user profile image"""
+    try:
+        # Get current image URL to extract filename
+        user = supabase.table('users').select('profile_image_url').eq('id', current_user["user_id"]).execute()
+        
+        if user.data and user.data[0].get('profile_image_url'):
+            # Try to delete from storage
+            try:
+                filename = f"profile-images/{current_user['user_id']}.jpg"  # Assuming jpg, adjust if needed
+                supabase.storage.from_('profile-images').remove([filename])
+            except:
+                pass  # File might not exist or already deleted
+        
+        # Remove URL from database
+        supabase.table('users').update({
+            "profile_image_url": None
+        }).eq('id', current_user["user_id"]).execute()
+        
+        return {"message": "Profile image deleted successfully"}
+        
+    except Exception as e:
+        logger.error(f"Error deleting profile image: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ============= ADVOCATE ENDPOINTS =============
 @api_router.post("/advocates/profile", response_model=AdvocateResponse)
 async def create_advocate_profile(

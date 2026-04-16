@@ -30,7 +30,10 @@ from models import (
     # New models for workflow
     MeetingRequest, MeetingRequestCreate, MeetingRequestResponse, MeetingRequestStatus,
     Meeting, MeetingCreate, MeetingResponse, MeetingStatus, AdvocateDecision,
-    CaseStageHistory, CaseStageHistoryCreate
+    CaseStageHistory, CaseStageHistoryCreate,
+    # Payment models
+    PaymentRequest, PaymentRequestCreate, PaymentRequestResponse, PaymentStatus,
+    PaymentVerification, AdvocatePaymentSettings, AdvocatePaymentSettingsUpdate
 )
 from pydantic import BaseModel
 

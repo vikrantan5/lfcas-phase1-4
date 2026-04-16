@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Settings as SettingsIcon, User, Camera, Loader2, Check, X, Upload, Mail, Phone, MapPin, Briefcase, Award } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { useToast } from '../../hooks/use-toast';
+import axios from 'axios';
 import '../../styles/advocate-dashboard.css';
 
 const Settings = () => {
@@ -24,6 +25,13 @@ const Settings = () => {
   const [profile, setProfile] = useState(null);
   const [profileImage, setProfileImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
+  
+  // Payment settings
+  const [paymentSettings, setPaymentSettings] = useState({
+    razorpay_key_id: '',
+    razorpay_key_secret: ''
+  });
+  const [hasExistingSecret, setHasExistingSecret] = useState(false);
   
   const [formData, setFormData] = useState({
     full_name: '',
@@ -49,12 +57,12 @@ const Settings = () => {
 
   useEffect(() => {
     loadProfile();
+    loadPaymentSettings();
   }, []);
 
   const loadProfile = async () => {
     try {
       setLoading(true);
-      // Get advocate profile
       const response = await advocateAPI.list();
       const myProfile = response.data.find(adv => adv.user_id === user.id);
       
@@ -69,17 +77,11 @@ const Settings = () => {
           experience_years: myProfile.experience_years || 0,
           location: myProfile.location || '',
           bio: myProfile.bio || '',
-          profile_image_url: myProfile.profile_image_url || ''
+          profile_image_url: user.profile_image_url || ''
         });
-        if (myProfile.profile_image_url) {
-          setImagePreview(myProfile.profile_image_url);
+        if (user.profile_image_url) {
+          setImagePreview(user.profile_image_url);
         }
-      } else {
-        toast({
-          title: "Profile Not Found",
-          description: "Please complete your advocate profile first.",
-          variant: "destructive"
-        });
       }
     } catch (error) {
       console.error('Failed to load profile:', error);
@@ -90,6 +92,26 @@ const Settings = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadPaymentSettings = async () => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await axios.get(
+        `${process.env.REACT_APP_BACKEND_URL}/api/payments/settings`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      if (response.data.razorpay_key_id) {
+        setPaymentSettings(prev => ({
+          ...prev,
+          razorpay_key_id: response.data.razorpay_key_id
+        }));
+      }
+      setHasExistingSecret(response.data.has_secret);
+    } catch (error) {
+      console.error('Failed to load payment settings:', error);
     }
   };
 
@@ -115,31 +137,27 @@ const Settings = () => {
     try {
       setUploadingImage(true);
       
-      const fileExt = profileImage.name.split('.').pop();
-      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
-      const filePath = `advocate-profiles/${fileName}`;
+      const token = localStorage.getItem('access_token');
+      const formData = new FormData();
+      formData.append('file', profileImage);
 
-      // Upload to Supabase Storage
-      const { data, error } = await supabase.storage
-        .from('profile-images')
-        .upload(filePath, profileImage, {
-          cacheControl: '3600',
-          upsert: true
-        });
+      const response = await axios.post(
+        `${process.env.REACT_APP_BACKEND_URL}/api/users/profile-image`,
+        formData,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'multipart/form-data'
+          }
+        }
+      );
 
-      if (error) throw error;
-
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('profile-images')
-        .getPublicUrl(filePath);
-
-      return publicUrl;
+      return response.data.image_url;
     } catch (error) {
       console.error('Image upload error:', error);
       toast({
         title: "Upload Failed",
-        description: error.message || "Failed to upload profile image",
+        description: error.response?.data?.detail || "Failed to upload profile image",
         variant: "destructive"
       });
       return formData.profile_image_url;
@@ -156,38 +174,51 @@ const Settings = () => {
       let imageUrl = formData.profile_image_url;
       if (profileImage) {
         imageUrl = await uploadProfileImage();
-        if (!imageUrl) return; // Upload failed
+        if (!imageUrl) return;
       }
 
-      // Update profile
-      const updateData = {
-        bar_council_id: formData.bar_council_id,
-        specialization: formData.specialization,
-        experience_years: parseInt(formData.experience_years),
-        location: formData.location,
-        bio: formData.bio,
-        profile_image_url: imageUrl
-      };
-
-      // Call API to update profile
+      // Update advocate profile
       if (profile?.id) {
-        await advocateAPI.updateProfile(profile.id, updateData);
+        const updateData = {
+          bar_council_id: formData.bar_council_id,
+          specialization: formData.specialization,
+          experience_years: parseInt(formData.experience_years),
+          location: formData.location,
+          bio: formData.bio
+        };
+        
+        await axios.patch(
+          `${process.env.REACT_APP_BACKEND_URL}/api/advocates/${profile.id}`,
+          updateData,
+          { headers: { Authorization: `Bearer ${localStorage.getItem('access_token')}` } }
+        );
+      }
+
+      // Save payment settings if changed
+      if (paymentSettings.razorpay_key_id || paymentSettings.razorpay_key_secret) {
+        const token = localStorage.getItem('access_token');
+        await axios.post(
+          `${process.env.REACT_APP_BACKEND_URL}/api/payments/settings`,
+          paymentSettings,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
       }
 
       toast({
         title: "Profile Updated",
-        description: "Your profile has been updated successfully",
+        description: "Your profile and payment settings have been updated successfully",
       });
 
       setProfileImage(null);
       setFormData({ ...formData, profile_image_url: imageUrl });
       setImagePreview(imageUrl);
+      loadPaymentSettings();
       
     } catch (error) {
       console.error('Save error:', error);
       toast({
         title: "Save Failed",
-        description: error.message || "Failed to save profile",
+        description: error.response?.data?.detail || "Failed to save settings",
         variant: "destructive"
       });
     } finally {
@@ -231,7 +262,6 @@ const Settings = () => {
         <DashboardHeader userName={user?.full_name} onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
         
         <div className="adv-content" style={{ padding: '24px 28px' }}>
-          {/* Page Header */}
           <div style={{ marginBottom: 24 }}>
             <h1 style={{ fontSize: 28, fontWeight: 700, color: '#1A0A3E', margin: 0, marginBottom: 4 }}>
               Profile & Settings
@@ -242,7 +272,6 @@ const Settings = () => {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 24 }}>
-            {/* Left Sidebar - Profile Image */}
             <div>
               <Card>
                 <CardHeader>
@@ -289,25 +318,6 @@ const Settings = () => {
                       style={{ display: 'none' }}
                     />
                   </div>
-                  {profileImage && (
-                    <Button
-                      onClick={uploadProfileImage}
-                      disabled={uploadingImage}
-                      style={{ width: '100%' }}
-                    >
-                      {uploadingImage ? (
-                        <>
-                          <Loader2 className="animate-spin" size={16} style={{ marginRight: 8 }} />
-                          Uploading...
-                        </>
-                      ) : (
-                        <>
-                          <Upload size={16} style={{ marginRight: 8 }} />
-                          Upload Image
-                        </>
-                      )}
-                    </Button>
-                  )}
                   <p style={{ fontSize: 12, color: '#888', textAlign: 'center', margin: 0 }}>
                     Accepted: JPG, PNG (max 5MB)
                   </p>
@@ -315,9 +325,7 @@ const Settings = () => {
               </Card>
             </div>
 
-            {/* Right Content - Profile Form */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-              {/* Personal Information */}
               <Card>
                 <CardHeader>
                   <CardTitle>Personal Information</CardTitle>
@@ -332,7 +340,6 @@ const Settings = () => {
                         <Input
                           id="full_name"
                           value={formData.full_name}
-                          onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
                           disabled
                           style={{ paddingLeft: 40 }}
                         />
@@ -346,7 +353,6 @@ const Settings = () => {
                           id="email"
                           type="email"
                           value={formData.email}
-                          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                           disabled
                           style={{ paddingLeft: 40 }}
                         />
@@ -375,7 +381,7 @@ const Settings = () => {
                           id="location"
                           value={formData.location}
                           onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                          placeholder="e.g., New Delhi"
+                          placeholder="e.g., kolkata"
                           style={{ paddingLeft: 40 }}
                         />
                       </div>
@@ -384,7 +390,6 @@ const Settings = () => {
                 </CardContent>
               </Card>
 
-              {/* Professional Information */}
               <Card>
                 <CardHeader>
                   <CardTitle>Professional Information</CardTitle>
@@ -400,7 +405,7 @@ const Settings = () => {
                           id="bar_council_id"
                           value={formData.bar_council_id}
                           onChange={(e) => setFormData({ ...formData, bar_council_id: e.target.value })}
-                          placeholder="e.g., D/1234/2015"
+                          placeholder="e.g., 824072301"
                           style={{ paddingLeft: 40 }}
                         />
                       </div>
@@ -464,7 +469,44 @@ const Settings = () => {
                 </CardContent>
               </Card>
 
-              {/* Save Button */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Payment Settings</CardTitle>
+                  <CardDescription>Configure Razorpay keys to receive payments from clients</CardDescription>
+                </CardHeader>
+                <CardContent style={{ display: 'grid', gap: 16 }}>
+                  <div>
+                    <Label htmlFor="razorpay_key_id">Razorpay Key ID</Label>
+                    <Input
+                      id="razorpay_key_id"
+                      value={paymentSettings.razorpay_key_id}
+                      onChange={(e) => setPaymentSettings({ ...paymentSettings, razorpay_key_id: e.target.value })}
+                      placeholder="rzp_test_xxxxx or rzp_live_xxxxx"
+                      style={{ marginTop: 8 }}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="razorpay_key_secret">Razorpay Key Secret</Label>
+                    <Input
+                      id="razorpay_key_secret"
+                      type="password"
+                      value={paymentSettings.razorpay_key_secret}
+                      onChange={(e) => setPaymentSettings({ ...paymentSettings, razorpay_key_secret: e.target.value })}
+                      placeholder={hasExistingSecret ? "••••••••" : "Enter your Razorpay secret key"}
+                      style={{ marginTop: 8 }}
+                    />
+                    {hasExistingSecret && (
+                      <p style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
+                        Leave blank to keep existing secret key
+                      </p>
+                    )}
+                  </div>
+                  <p style={{ fontSize: 12, color: '#666', background: '#F0EBF9', padding: 12, borderRadius: 8 }}>
+                    <strong>Note:</strong> Get your Razorpay keys from the <a href="https://dashboard.razorpay.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#724AE3' }}>Razorpay Dashboard</a>. Use test keys for testing and live keys for production.
+                  </p>
+                </CardContent>
+              </Card>
+
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
                 <Button
                   variant="outline"

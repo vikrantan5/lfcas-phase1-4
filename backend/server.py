@@ -275,7 +275,7 @@ async def create_advocate_profile(
     profile = {
         "user_id": current_user["user_id"],
         "bar_council_id": profile_data.bar_council_id,
-        "specialization": [s.value for s in profile_data.specialization],
+        "specializations": [s.value for s in profile_data.specialization],
         "experience_years": profile_data.experience_years,
         "location": profile_data.location,
         "bio": profile_data.bio,
@@ -305,7 +305,7 @@ async def list_advocates(
     if location:
         query = query.ilike('location', f'%{location}%')
     if specialization:
-        query = query.contains('specialization', [specialization.value])
+        query = query.contains('specializations', [specialization.value])
     
     result = query.limit(limit).execute()
     
@@ -397,7 +397,7 @@ async def analyze_legal_query(
         adv_query = supabase.table('advocates').select('*, users!inner(*)').eq('status', 'approved')
         
         if query.case_type:
-            adv_query = adv_query.contains('specialization', [query.case_type.value])
+            adv_query = adv_query.contains('specializations', [query.case_type.value])
         if query.location:
             adv_query = adv_query.ilike('location', f'%{query.location}%')
         
@@ -2280,13 +2280,16 @@ async def get_admin_logs(
 
 
 # ============= VOICE AI ENDPOINTS =============
+# from admin_models import AdminLog, AdminLogResponse, AdminStats, PlatformStats, NotificationResponse
 from voice_models import (
-    VoiceSessionCreate, VoiceSessionResponse, VoiceMessageCreate,
-    VoiceMessageResponse, AICaseAnalysisCreate, AICaseAnalysisResponse,
-    VoiceCaseDraftCreate, VoiceCaseDraftResponse, ProcessVoiceConversationRequest,
-    ConfirmCaseDraftRequest, VoiceToMeetingRequestRequest, VoiceLanguage
+    VoiceSessionCreate, VoiceSession, VoiceSessionResponse,
+    VoiceMessageCreate, VoiceMessage, VoiceMessageResponse,
+    AICaseAnalysisCreate, AICaseAnalysis, AICaseAnalysisResponse,
+    VoiceCaseDraftCreate, VoiceCaseDraft, VoiceCaseDraftResponse,
+    ProcessVoiceConversationRequest, ConfirmCaseDraftRequest,
+    VoiceLanguage, VoiceSessionStatus, MessageSender, CaseDraftStatus
 )
-from vapi_service import get_vapi_service
+from web_speech_service import get_web_speech_service
 
 @api_router.post("/voice/start-session", response_model=VoiceSessionResponse)
 async def start_voice_session(
@@ -2372,8 +2375,53 @@ async def save_voice_message(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@api_router.get("/voice/session/{session_id}/messages")
+async def get_voice_session_messages(
+    session_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get all messages for a voice session"""
+    try:
+        # Verify session belongs to user
+        session = supabase.table('voice_sessions').select('*').eq('id', session_id).eq('user_id', current_user["user_id"]).execute()
+        
+        if not session.data or len(session.data) == 0:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        # Get messages
+        messages = supabase.table('voice_messages').select('*').eq('session_id', session_id).order('created_at').execute()
+        
+        return messages.data if messages.data else []
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting session messages: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get messages: {str(e)}")
 
 
+
+@api_router.get("/voice/session/{session_id}/messages")
+async def get_voice_session_messages(
+    session_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get all messages for a voice session"""
+    try:
+        # Verify session belongs to user
+        session = supabase.table('voice_sessions').select('*').eq('id', session_id).eq('user_id', current_user["user_id"]).execute()
+        
+        if not session.data or len(session.data) == 0:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        # Get messages
+        messages = supabase.table('voice_messages').select('*').eq('session_id', session_id).order('created_at').execute()
+        
+        return messages.data if messages.data else []
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting session messages: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get messages: {str(e)}")
 
 @api_router.post("/voice/get-next-question")
 async def get_next_question(
@@ -2475,16 +2523,16 @@ async def process_voice_conversation(
         
         # Validate transcript
         if not request.transcript or len(request.transcript.strip()) < 20:
-            logger.error("Transcript too short or empty")
+            logger.info(f"Transcript too short or empty")
             raise HTTPException(
                 status_code=400, 
                 detail="Please provide a detailed description of your legal problem. The conversation is too short."
             )
         
-        vapi_service = get_vapi_service()
+        web_speech_service = get_web_speech_service()
         
         # Extract case info from transcript with validation
-        case_info = vapi_service.extract_case_info_from_transcript(
+        case_info = web_speech_service.extract_case_info_from_transcript(
             request.transcript,
             request.language
         )

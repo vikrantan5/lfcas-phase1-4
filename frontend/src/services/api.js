@@ -76,6 +76,11 @@ export const caseAPI = {
   getStageHistory: (id) => api.get(`/cases/${id}/stage-history`),
 };
 
+
+// Client Dashboard API
+export const dashboardAPI = {
+  getSummary: () => api.get('/client/dashboard-summary'),
+};
 // Hearing APIs
 export const hearingAPI = {
   create: (data) => api.post('/hearings', data),

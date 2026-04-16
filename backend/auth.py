@@ -148,6 +148,18 @@ async def create_user_with_auth(email: str, password: str, full_name: str, phone
                     if auth_response and auth_response.user:
                         auth_user = auth_response.user
                         print(f"✅ User created via sign_up: {email}")
+
+
+                         # CRITICAL FIX: Manually confirm the user's email using admin API
+                        # This bypasses the email confirmation requirement
+                        try:
+                            supabase.auth.admin.update_user_by_id(
+                                auth_user.id,
+                                {"email_confirm": True}
+                            )
+                            print(f"✅ Email auto-confirmed for: {email}")
+                        except Exception as confirm_error:
+                            print(f"⚠️  Email confirmation failed (user can still login if auto-confirm is enabled): {confirm_error}")
                 except Exception as signup_error:
                     signup_error_str = str(signup_error).lower()
                     if "rate limit" in signup_error_str or "429" in signup_error_str:

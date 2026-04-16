@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { caseAPI, aiAPI, meetingRequestAPI, meetingAPI } from '../../services/api';
+import { caseAPI, aiAPI, meetingRequestAPI, meetingAPI, dashboardAPI } from '../../services/api';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
@@ -21,6 +21,11 @@ import { useToast } from '../../hooks/use-toast';
 import NotificationPanel from '../../components/NotificationPanel';
 import RatingDialog from '../../components/RatingDialog';
 import '../../styles/client-dashboard.css';
+import Documents from './Documents';
+import CaseTracker from './CaseTracker';
+import FindAdvocates from './FindAdvocates';
+import MyAdvocate from './MyAdvocate';
+import MeetingRequests from './MeetingRequests';
 
 // ============ MOCK DATA FOR NEW SECTIONS ============
 const mockCaseTimeline = [
@@ -167,6 +172,15 @@ const ClientDashboard = () => {
   const [cases, setCases] = useState([]);
   const [meetingRequests, setMeetingRequests] = useState([]);
   const [meetings, setMeetings] = useState([]);
+   const [dashboardSummary, setDashboardSummary] = useState({
+    total_cases: 0,
+    active_cases: 0,
+    completed_cases: 0,
+    upcoming_meetings: 0,
+    total_documents: 0,
+    case_score: 7.5,
+    unread_notifications: 0
+  });
   const [loading, setLoading] = useState(true);
   const [activeItem, setActiveItem] = useState('dashboard');
 
@@ -192,22 +206,56 @@ const ClientDashboard = () => {
   const loadAllData = async () => {
     try {
       setLoading(true);
-      await Promise.all([loadCases(), loadMeetingRequests(), loadMeetings()]);
+      await Promise.all([
+        loadDashboardSummary(),
+        loadCases(),
+        loadMeetingRequests(),
+        loadMeetings()
+      ]);
     } catch (error) { console.error('Failed to load data:', error); }
     finally { setLoading(false); }
   };
 
+  const loadDashboardSummary = async () => {
+    try {
+      const response = await dashboardAPI.getSummary();
+      setDashboardSummary(response.data);
+    } catch (error) {
+      console.error('Failed to load dashboard summary:', error);
+    }
+  };
+
   const loadCases = async () => {
-    try { const response = await caseAPI.list(); setCases(response.data); }
-    catch (error) { console.error('Failed to load cases:', error); }
+    try { 
+      const response = await caseAPI.list(); 
+      setCases(response.data || []); 
+    }
+    catch (error) { 
+      console.error('Failed to load cases:', error); 
+      setCases([]);
+    }
   };
+  
   const loadMeetingRequests = async () => {
-    try { const response = await meetingRequestAPI.list(); setMeetingRequests(response.data); }
-    catch (error) { console.error('Failed to load meeting requests:', error); }
+    try { 
+      const response = await meetingRequestAPI.list(); 
+      setMeetingRequests(response.data || []); 
+    }
+    catch (error) { 
+      console.error('Failed to load meeting requests:', error); 
+      setMeetingRequests([]);
+    }
   };
+  
   const loadMeetings = async () => {
-    try { const response = await meetingAPI.list(); setMeetings(response.data); }
-    catch (error) { console.error('Failed to load meetings:', error); }
+    try { 
+      const response = await meetingAPI.list(); 
+      setMeetings(response.data || []); 
+    }
+    catch (error) { 
+      console.error('Failed to load meetings:', error); 
+      setMeetings([]);
+    }
   };
 
   const handleAIAnalyze = async (e) => {

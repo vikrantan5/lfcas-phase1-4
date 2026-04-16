@@ -1317,6 +1317,67 @@ async def get_advocate_ratings(advocate_id: str, limit: int = 20):
     
     return [Rating(**r) for r in result.data]
 
+# ============= CLIENT DASHBOARD ENDPOINT =============
+@api_router.get("/client/dashboard-summary")
+async def get_client_dashboard_summary(
+    current_user: dict = Depends(require_role([UserRole.CLIENT]))
+):
+    """Get dashboard summary for client"""
+    user_id = current_user["user_id"]
+    
+    # Count total cases
+    total_cases_result = supabase.table('cases').select('*', count='exact').eq('client_id', user_id).execute()
+    total_cases = total_cases_result.count or 0
+    
+    # Count active cases (not closed)
+    active_cases_result = supabase.table('cases').select('*', count='exact').eq('client_id', user_id).neq('current_stage', 'CLOSED').execute()
+    active_cases = active_cases_result.count or 0
+    
+    # Count completed cases
+    completed_cases_result = supabase.table('cases').select('*', count='exact').eq('client_id', user_id).eq('current_stage', 'CLOSED').execute()
+    completed_cases = completed_cases_result.count or 0
+    
+    # Count upcoming meetings (this week)
+    from datetime import timedelta
+    today = datetime.now(timezone.utc)
+    week_end = today + timedelta(days=7)
+    
+    meetings_result = supabase.table('meetings').select('*', count='exact').eq('client_id', user_id).gte('scheduled_date', today.isoformat()).lte('scheduled_date', week_end.isoformat()).execute()
+    upcoming_meetings = meetings_result.count or 0
+    
+    # Count total documents uploaded by this client
+    case_ids = [case['id'] for case in total_cases_result.data] if total_cases_result.data else []
+    if case_ids:
+        documents_result = supabase.table('documents').select('case_id', count='exact').in_('case_id', case_ids).execute()
+        total_documents = documents_result.count or 0
+    else:
+        total_documents = 0
+    
+    # Calculate average case score (based on AI analysis confidence if available)
+    case_score = 7.5  # Default score
+    if total_cases_result.data and len(total_cases_result.data) > 0:
+        scores = []
+        for case in total_cases_result.data:
+            ai_analysis = case.get('ai_analysis', {})
+            if isinstance(ai_analysis, dict):
+                confidence = ai_analysis.get('confidence_score', 75)  # Default 75%
+                scores.append(confidence / 10)  # Convert to 0-10 scale
+        if scores:
+            case_score = round(sum(scores) / len(scores), 1)
+    
+    # Get recent notifications (unread count)
+    unread_notifications = supabase.table('notifications').select('*', count='exact').eq('user_id', user_id).eq('is_read', False).execute()
+    unread_count = unread_notifications.count or 0
+    
+    return {
+        "total_cases": total_cases,
+        "active_cases": active_cases,
+        "completed_cases": completed_cases,
+        "upcoming_meetings": upcoming_meetings,
+        "total_documents": total_documents,
+        "case_score": case_score,
+        "unread_notifications": unread_count
+    }
 
 # ============= ADMIN/ANALYTICS ENDPOINTS =============
 @api_router.get("/admin/stats")

@@ -1,18 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import { ChevronRight, TrendingUp, Upload } from 'lucide-react';
-
-const chartData = [
-  { day: 'Mon', hearings: 10 },
-  { day: 'Tue', hearings: 11 },
-  { day: 'Wed', hearings: 9 },
-  { day: 'Thu', hearings: 12 },
-  { day: 'Fri', hearings: 14 },
-  { day: 'Sat', hearings: 18 },
-  { day: 'Sun', hearings: 24 },
-];
+import { advocateDashboardAPI } from '../../services/api';
 
 const CustomTooltip = ({ active, payload }) => {
   if (active && payload && payload.length) {
@@ -26,7 +17,7 @@ const CustomTooltip = ({ active, payload }) => {
         fontWeight: 600,
         fontFamily: 'Poppins, sans-serif',
       }}>
-        {payload[0].value} Hearings
+        {payload[0].value} {payload[0].name === 'hearings' ? 'Hearings' : 'Documents'}
       </div>
     );
   }
@@ -35,13 +26,48 @@ const CustomTooltip = ({ active, payload }) => {
 
 const ActivityStatistics = () => {
   const [activeTab, setActiveTab] = useState('hearings');
+  const [chartData, setChartData] = useState([]);
+  const [summary, setSummary] = useState({
+    hearings_this_week: 0,
+    documents_this_week: 0,
+    cases_filed_this_month: 0,
+    cases_change_percent: 0,
+    documents_30_days: 0
+  });
+
+  useEffect(() => {
+    loadActivityData();
+  }, []);
+
+  const loadActivityData = async () => {
+    try {
+      const response = await advocateDashboardAPI.getActivityStats();
+      const data = response.data;
+      
+      setChartData(data.activity_data || []);
+      setSummary(data.summary || {
+        hearings_this_week: 0,
+        documents_this_week: 0,
+        cases_filed_this_month: 0,
+        cases_change_percent: 0,
+        documents_30_days: 0
+      });
+    } catch (error) {
+      console.error('Failed to load activity stats:', error);
+    }
+  };
+
+  const displayData = chartData.map(item => ({
+    day: item.day,
+    hearings: activeTab === 'hearings' ? item.hearings : item.documents
+  }));
 
   return (
     <div className="dash-card" data-testid="activity-statistics" style={{ height: '100%' }}>
       <div className="card-header">
         <h3>Activity Statistics</h3>
         <button className="hearings-toggle-btn" data-testid="hearings-toggle">
-          Hearings <ChevronRight size={14} />
+          {activeTab === 'hearings' ? 'Hearings' : 'Documents'} <ChevronRight size={14} />
         </button>
       </div>
 
@@ -67,7 +93,7 @@ const ActivityStatistics = () => {
         {/* Chart */}
         <div style={{ width: '100%', height: 200 }}>
           <ResponsiveContainer>
-            <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+            <AreaChart data={displayData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
               <defs>
                 <linearGradient id="hearingsGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#815DF5" stopOpacity={0.3} />
@@ -90,6 +116,7 @@ const ActivityStatistics = () => {
               <Area
                 type="monotone"
                 dataKey="hearings"
+                name={activeTab}
                 stroke="#815DF5"
                 strokeWidth={2.5}
                 fill="url(#hearingsGradient)"
@@ -105,19 +132,23 @@ const ActivityStatistics = () => {
           display: 'flex', alignItems: 'center', gap: 8, marginTop: 8,
           background: '#F8F5FF', borderRadius: 8, padding: '6px 12px', width: 'fit-content'
         }}>
-          <span style={{ fontSize: 22, fontWeight: 700, color: '#1A0A3E' }}>16</span>
+          <span style={{ fontSize: 22, fontWeight: 700, color: '#1A0A3E' }}>
+            {activeTab === 'hearings' ? summary.hearings_this_week : summary.documents_this_week}
+          </span>
           <span style={{ fontSize: 13, fontWeight: 600, color: '#1A0A3E' }}>
-            Hearings <span style={{ fontWeight: 400, color: '#888' }}>This Week</span>
+            {activeTab === 'hearings' ? 'Hearings' : 'Documents'} <span style={{ fontWeight: 400, color: '#888' }}>This Week</span>
           </span>
         </div>
 
         {/* Bottom Stats */}
         <div className="stats-bottom-row">
           <div className="stats-bottom-item">
-            <TrendingUp size={18} color="#18B057" />
+            <TrendingUp size={18} color={summary.cases_change_percent >= 0 ? "#18B057" : "#FF5252"} />
             <div>
               <p style={{ fontSize: 11, color: '#888', margin: 0 }}>Cases Filed This Month</p>
-              <p style={{ fontSize: 12, color: '#18B057', fontWeight: 600, margin: 0 }}>+10% Vs last month.</p>
+              <p style={{ fontSize: 12, color: summary.cases_change_percent >= 0 ? '#18B057' : '#FF5252', fontWeight: 600, margin: 0 }}>
+                {summary.cases_change_percent >= 0 ? '+' : ''}{summary.cases_change_percent}% Vs last month.
+              </p>
             </div>
           </div>
           <div className="stats-bottom-item">
@@ -125,7 +156,7 @@ const ActivityStatistics = () => {
             <div>
               <p style={{ fontSize: 11, color: '#888', margin: 0 }}>Document Uploads</p>
               <p style={{ fontSize: 18, fontWeight: 700, color: '#1A0A3E', margin: 0 }}>
-                32 <span style={{ fontSize: 10, color: '#888', fontWeight: 400 }}>30days WNCK.</span>
+                {summary.documents_30_days} <span style={{ fontSize: 10, color: '#888', fontWeight: 400 }}>Last 30 days</span>
               </p>
             </div>
           </div>

@@ -88,6 +88,16 @@ export const dashboardAPI = {
   updateUserProfile: (data) => api.patch('/users/profile', data),
   sendAdvocateEmail: (data) => api.post('/client/send-advocate-email', data),
 };
+
+
+
+// Advocate Dashboard API
+export const advocateDashboardAPI = {
+  getSummary: () => api.get('/advocate/dashboard-summary'),
+  getActivityStats: () => api.get('/advocate/activity-stats'),
+  getTodayHearings: () => api.get('/advocate/today-hearings'),
+  getReminders: () => api.get('/advocate/reminders'),
+};
 // Hearing APIs
 export const hearingAPI = {
   create: (data) => api.post('/hearings', data),

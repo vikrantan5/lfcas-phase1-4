@@ -1,43 +1,93 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Star, Briefcase, Calendar, FileText } from 'lucide-react';
-
-const stats = [
-  {
-    icon: Star,
-    iconBg: '#FFF8E1',
-    iconColor: '#FFD700',
-    label: 'Advocate Score',
-    value: '4.8',
-    sub: '(120 Reviews)',
-    fillStar: true,
-  },
-  {
-    icon: Briefcase,
-    iconBg: '#EDE7F6',
-    iconColor: '#724AE3',
-    label: 'Active Cases',
-    value: '5',
-    sub: 'This Week',
-  },
-  {
-    icon: Calendar,
-    iconBg: '#EDE7F6',
-    iconColor: '#724AE3',
-    label: "Today's Hearings",
-    value: '2',
-    sub: 'Scheduled',
-  },
-  {
-    icon: FileText,
-    iconBg: '#EDE7F6',
-    iconColor: '#724AE3',
-    label: 'Requests',
-    value: '3',
-    sub: 'Pending',
-  },
-];
+import { advocateDashboardAPI } from '../../services/api';
 
 const StatCards = () => {
+  const [stats, setStats] = useState([
+    {
+      icon: Star,
+      iconBg: '#FFF8E1',
+      iconColor: '#FFD700',
+      label: 'Advocate Score',
+      value: '0',
+      sub: '(0 Reviews)',
+      fillStar: true,
+    },
+    {
+      icon: Briefcase,
+      iconBg: '#EDE7F6',
+      iconColor: '#724AE3',
+      label: 'Active Cases',
+      value: '0',
+      sub: 'Ongoing',
+    },
+    {
+      icon: Calendar,
+      iconBg: '#EDE7F6',
+      iconColor: '#724AE3',
+      label: "Today's Hearings",
+      value: '0',
+      sub: 'Scheduled',
+    },
+    {
+      icon: FileText,
+      iconBg: '#EDE7F6',
+      iconColor: '#724AE3',
+      label: 'Requests',
+      value: '0',
+      sub: 'Pending',
+    },
+  ]);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, []);
+
+  const loadDashboardData = async () => {
+    try {
+      const response = await advocateDashboardAPI.getSummary();
+      const data = response.data;
+      
+      setStats([
+        {
+          icon: Star,
+          iconBg: '#FFF8E1',
+          iconColor: '#FFD700',
+          label: 'Advocate Score',
+          value: data.advocate_score ? data.advocate_score.toFixed(1) : '0.0',
+          sub: `(${data.total_reviews || 0} Reviews)`,
+          fillStar: true,
+        },
+        {
+          icon: Briefcase,
+          iconBg: '#EDE7F6',
+          iconColor: '#724AE3',
+          label: 'Active Cases',
+          value: String(data.active_cases || 0),
+          sub: 'Ongoing',
+        },
+        {
+          icon: Calendar,
+          iconBg: '#EDE7F6',
+          iconColor: '#724AE3',
+          label: "Today's Hearings",
+          value: String(data.today_hearings || 0),
+          sub: 'Scheduled',
+        },
+        {
+          icon: FileText,
+          iconBg: '#EDE7F6',
+          iconColor: '#724AE3',
+          label: 'Requests',
+          value: String(data.pending_requests || 0),
+          sub: 'Pending',
+        },
+      ]);
+    } catch (error) {
+      console.error('Failed to load dashboard summary:', error);
+    }
+  };
+
   return (
     <div
       style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}

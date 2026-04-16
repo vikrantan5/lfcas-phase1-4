@@ -1521,7 +1521,278 @@ async def get_recommended_advocates(
     
     return {"advocates": recommended_advocates}
 
+@api_router.get("/advocate/dashboard-summary")
+async def get_advocate_dashboard_summary(
+    current_user: dict = Depends(require_role([UserRole.ADVOCATE]))
+):
+    """Get dashboard summary for advocate"""
+    user_id = current_user["user_id"]
+    
+    # Get advocate profile
+    adv_profile = supabase.table('advocates').select('*').eq('user_id', user_id).execute()
+    if not adv_profile.data or len(adv_profile.data) == 0:
+        raise HTTPException(status_code=404, detail="Advocate profile not found")
+    
+    advocate_id = adv_profile.data[0]['id']
+    advocate_data = adv_profile.data[0]
+    
+    # Get rating and reviews
+    average_rating = advocate_data.get('rating', 0.0)
+    total_reviews = advocate_data.get('total_reviews', 0)
+    
+    # Calculate advocate score (weighted average of rating and reviews)
+    # Score is based on rating (out of 5) converted to 10-point scale
+    advocate_score = round(average_rating * 2, 1) if average_rating > 0 else 0.0
+    
+    # Count active cases (not closed)
+    active_cases_result = supabase.table('cases').select('*', count='exact').eq('advocate_id', advocate_id).neq('current_stage', 'CLOSED').execute()
+    active_cases = active_cases_result.count or 0
+    
+    # Count today's hearings
+    from datetime import timedelta
+    today = datetime.now(timezone.utc)
+    today_start = today.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end = today_start + timedelta(days=1)
+    
+    # Get case IDs for this advocate
+    cases_result = supabase.table('cases').select('id').eq('advocate_id', advocate_id).execute()
+    case_ids = [case['id'] for case in cases_result.data] if cases_result.data else []
+    
+    today_hearings = 0
+    if case_ids:
+        hearings_result = supabase.table('hearings').select('*', count='exact').in_('case_id', case_ids).gte('hearing_date', today_start.isoformat()).lt('hearing_date', today_end.isoformat()).eq('is_completed', False).execute()
+        today_hearings = hearings_result.count or 0
+    
+    # Count pending meeting requests
+    pending_requests_result = supabase.table('meeting_requests').select('*', count='exact').eq('advocate_id', advocate_id).eq('status', 'pending').execute()
+    pending_requests = pending_requests_result.count or 0
+    
+    return {
+        "average_rating": average_rating,
+        "total_reviews": total_reviews,
+        "advocate_score": advocate_score,
+        "active_cases": active_cases,
+        "today_hearings": today_hearings,
+        "pending_requests": pending_requests
+    }
 
+@api_router.get("/advocate/activity-stats")
+async def get_advocate_activity_stats(
+    current_user: dict = Depends(require_role([UserRole.ADVOCATE]))
+):
+    """Get activity statistics for advocate (last 7 days)"""
+    user_id = current_user["user_id"]
+    
+    # Get advocate profile
+    adv_profile = supabase.table('advocates').select('id').eq('user_id', user_id).execute()
+    if not adv_profile.data or len(adv_profile.data) == 0:
+        raise HTTPException(status_code=404, detail="Advocate profile not found")
+    
+    advocate_id = adv_profile.data[0]['id']
+    
+    # Get last 7 days of activity
+    from datetime import timedelta
+    today = datetime.now(timezone.utc)
+    seven_days_ago = today - timedelta(days=7)
+    thirty_days_ago = today - timedelta(days=30)
+    
+    # Get case IDs
+    cases_result = supabase.table('cases').select('id').eq('advocate_id', advocate_id).execute()
+    case_ids = [case['id'] for case in cases_result.data] if cases_result.data else []
+    
+    # Initialize activity data
+    activity_data = []
+    hearings_this_week = 0
+    documents_this_week = 0
+    
+    for i in range(7):
+        day = seven_days_ago + timedelta(days=i)
+        day_start = day.replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = day_start + timedelta(days=1)
+        
+        # Count hearings for this day
+        hearings_count = 0
+        documents_count = 0
+        
+        if case_ids:
+            hearings_result = supabase.table('hearings').select('*', count='exact').in_('case_id', case_ids).gte('hearing_date', day_start.isoformat()).lt('hearing_date', day_end.isoformat()).execute()
+            hearings_count = hearings_result.count or 0
+            hearings_this_week += hearings_count
+            
+            # Count documents uploaded by advocate on this day
+            documents_result = supabase.table('documents').select('*', count='exact').in_('case_id', case_ids).eq('uploaded_by', user_id).gte('created_at', day_start.isoformat()).lt('created_at', day_end.isoformat()).execute()
+            documents_count = documents_result.count or 0
+            documents_this_week += documents_count
+        
+        # Count case filings (cases created on this day)
+        cases_filed = supabase.table('cases').select('*', count='exact').eq('advocate_id', advocate_id).gte('created_at', day_start.isoformat()).lt('created_at', day_end.isoformat()).execute()
+        
+        activity_data.append({
+            "day": day.strftime("%a"),  # Day name (Mon, Tue, etc.)
+            "hearings": hearings_count,
+            "documents": documents_count,
+            "cases_filed": cases_filed.count or 0
+        })
+    
+    # Calculate summary statistics
+    # Cases filed this month
+    month_start = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    cases_this_month = supabase.table('cases').select('*', count='exact').eq('advocate_id', advocate_id).gte('created_at', month_start.isoformat()).execute()
+    
+    # Cases filed last month
+    last_month_start = (month_start - timedelta(days=1)).replace(day=1)
+    last_month_end = month_start
+    cases_last_month = supabase.table('cases').select('*', count='exact').eq('advocate_id', advocate_id).gte('created_at', last_month_start.isoformat()).lt('created_at', last_month_end.isoformat()).execute()
+    
+    # Calculate percentage change
+    cases_change_percent = 0
+    if cases_last_month.count and cases_last_month.count > 0:
+        cases_change_percent = round(((cases_this_month.count or 0) - cases_last_month.count) / cases_last_month.count * 100, 1)
+    elif cases_this_month.count and cases_this_month.count > 0:
+        cases_change_percent = 100
+    
+    # Documents uploaded in last 30 days
+    documents_30_days = 0
+    if case_ids:
+        documents_30_result = supabase.table('documents').select('*', count='exact').in_('case_id', case_ids).eq('uploaded_by', user_id).gte('created_at', thirty_days_ago.isoformat()).execute()
+        documents_30_days = documents_30_result.count or 0
+    
+    return {
+        "activity_data": activity_data,
+        "summary": {
+            "hearings_this_week": hearings_this_week,
+            "documents_this_week": documents_this_week,
+            "cases_filed_this_month": cases_this_month.count or 0,
+            "cases_change_percent": cases_change_percent,
+            "documents_30_days": documents_30_days
+        }
+    }
+
+
+@api_router.get("/advocate/today-hearings")
+async def get_advocate_today_hearings(
+    current_user: dict = Depends(require_role([UserRole.ADVOCATE]))
+):
+    """Get today's hearings for advocate"""
+    user_id = current_user["user_id"]
+    
+    # Get advocate profile
+    adv_profile = supabase.table('advocates').select('id').eq('user_id', user_id).execute()
+    if not adv_profile.data or len(adv_profile.data) == 0:
+        raise HTTPException(status_code=404, detail="Advocate profile not found")
+    
+    advocate_id = adv_profile.data[0]['id']
+    
+    # Get today's date range
+    from datetime import timedelta
+    today = datetime.now(timezone.utc)
+    today_start = today.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end = today_start + timedelta(days=1)
+    
+    # Get case IDs for this advocate
+    cases_result = supabase.table('cases').select('id, title, client_id').eq('advocate_id', advocate_id).execute()
+    case_ids = [case['id'] for case in cases_result.data] if cases_result.data else []
+    cases_map = {case['id']: case for case in cases_result.data} if cases_result.data else {}
+    
+    hearings = []
+    if case_ids:
+        # Get today's hearings
+        hearings_result = supabase.table('hearings').select('*').in_('case_id', case_ids).gte('hearing_date', today_start.isoformat()).lt('hearing_date', today_end.isoformat()).order('hearing_date').execute()
+        
+        for hearing in hearings_result.data:
+            case_data = cases_map.get(hearing['case_id'], {})
+            
+            # Get client name
+            client_name = "Client"
+            if case_data.get('client_id'):
+                client_result = supabase.table('users').select('full_name').eq('id', case_data['client_id']).execute()
+                if client_result.data:
+                    client_name = client_result.data[0]['full_name']
+            
+            # Get documents for this case
+            documents_result = supabase.table('documents').select('id', count='exact').eq('case_id', hearing['case_id']).execute()
+            documents_count = documents_result.count or 0
+            
+            hearings.append({
+                "id": hearing['id'],
+                "case_id": hearing['case_id'],
+                "case_title": case_data.get('title', 'Case'),
+                "client_name": client_name,
+                "hearing_date": hearing['hearing_date'],
+                "court_name": hearing.get('court_name', ''),
+                "court_room": hearing.get('court_room', ''),
+                "notes": hearing.get('notes', ''),
+                "documents_count": documents_count,
+                "is_completed": hearing.get('is_completed', False)
+            })
+    
+    return {"hearings": hearings}
+
+
+@api_router.get("/advocate/reminders")
+async def get_advocate_reminders(
+    current_user: dict = Depends(require_role([UserRole.ADVOCATE]))
+):
+    """Get upcoming reminders for advocate (hearings + meetings + deadlines)"""
+    user_id = current_user["user_id"]
+    
+    # Get advocate profile
+    adv_profile = supabase.table('advocates').select('id').eq('user_id', user_id).execute()
+    if not adv_profile.data or len(adv_profile.data) == 0:
+        raise HTTPException(status_code=404, detail="Advocate profile not found")
+    
+    advocate_id = adv_profile.data[0]['id']
+    
+    reminders = []
+    
+    # Get upcoming hearings (next 30 days)
+    from datetime import timedelta
+    today = datetime.now(timezone.utc)
+    thirty_days_later = today + timedelta(days=30)
+    
+    # Get case IDs
+    cases_result = supabase.table('cases').select('id, title').eq('advocate_id', advocate_id).execute()
+    case_ids = [case['id'] for case in cases_result.data] if cases_result.data else []
+    cases_map = {case['id']: case for case in cases_result.data} if cases_result.data else {}
+    
+    if case_ids:
+        # Get upcoming hearings
+        hearings_result = supabase.table('hearings').select('*').in_('case_id', case_ids).gte('hearing_date', today.isoformat()).lte('hearing_date', thirty_days_later.isoformat()).eq('is_completed', False).order('hearing_date').limit(10).execute()
+        
+        for hearing in hearings_result.data:
+            case_data = cases_map.get(hearing['case_id'], {})
+            reminders.append({
+                "type": "Hearing Date",
+                "detail": f"{hearing.get('court_name', 'Court')}, {hearing.get('court_room', '')}",
+                "case_title": case_data.get('title', 'Case'),
+                "time": hearing['hearing_date'],
+                "icon": "calendar",
+                "color": "blue",
+                "related_id": hearing['id'],
+                "related_type": "hearing"
+            })
+    
+    # Get upcoming meetings
+    meetings_result = supabase.table('meetings').select('*, client:users!meetings_client_id_fkey(full_name)').eq('advocate_id', advocate_id).gte('scheduled_date', today.isoformat()).lte('scheduled_date', thirty_days_later.isoformat()).neq('status', 'completed').order('scheduled_date').limit(10).execute()
+    
+    for meeting in meetings_result.data:
+        client_data = meeting.get('client', {})
+        client_name = client_data.get('full_name', 'Client') if client_data else 'Client'
+        
+        reminders.append({
+            "type": "Meeting with Client",
+            "detail": client_name,
+            "time": meeting['scheduled_date'],
+            "icon": "check",
+            "color": "green",
+            "related_id": meeting['id'],
+            "related_type": "meeting"
+        })
+    
+    # Sort by time
+    reminders.sort(key=lambda x: x['time'])
+    
+    return {"reminders": reminders[:10]}
 
 # ============= ADMIN/ANALYTICS ENDPOINTS =============
 @api_router.get("/admin/stats")

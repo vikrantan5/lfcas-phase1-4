@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Home, Briefcase, Search, Calendar, FileText, DollarSign,
   MessageSquare, Users, Settings, ChevronDown, ChevronRight,
@@ -6,19 +7,33 @@ import {
 } from 'lucide-react';
 
 const navItems = [
-  { icon: Home, label: 'Dashboard', badge: 5, active: true },
-  { icon: Briefcase, label: 'My Cases', hasChevron: true },
-  { icon: Search, label: 'Case Tracker' },
-  { icon: Calendar, label: 'Calendar', badge: 4 },
-  { icon: FileText, label: 'Requests', badge: 2 },
-  { icon: FileText, label: 'Documents' },
-  { icon: DollarSign, label: 'Payments', badge: 2 },
-  { icon: MessageSquare, label: 'Messages' },
-  { icon: Users, label: 'Find Clients' },
-  { icon: Settings, label: 'Settings' },
+  { icon: Home, label: 'Dashboard', badge: 5, active: true, path: '/advocate/dashboard' },
+  { icon: Briefcase, label: 'My Cases', hasChevron: true, path: '/advocate/cases' },
+  { icon: Search, label: 'Case Tracker', path: '/advocate/case-tracker' },
+  { icon: Calendar, label: 'Calendar', badge: 4, path: '/advocate/calendar' },
+  { icon: FileText, label: 'Requests', badge: 2, path: '/advocate/requests' },
+  { icon: FileText, label: 'Documents', path: '/advocate/documents' },
+  { icon: DollarSign, label: 'Payments', badge: 2, path: '/advocate/payments' },
+  { icon: MessageSquare, label: 'Messages', path: '/advocate/messages' },
+  { icon: Users, label: 'Find Clients', path: '/advocate/find-clients' },
+  { icon: Settings, label: 'Settings', path: '/advocate/settings' },
 ];
 
 const Sidebar = ({ isOpen, onClose, userName = 'Rahul Sharma' }) => {
+  const navigate = useNavigate();
+  const [activeItem, setActiveItem] = useState('Dashboard');
+
+  const handleNavClick = (item) => {
+    setActiveItem(item.label);
+    if (item.path) {
+      navigate(item.path);
+    }
+    // Close sidebar on mobile after navigation
+    if (window.innerWidth < 768) {
+      onClose();
+    }
+  };
+
   return (
     <>
       <div
@@ -52,8 +67,10 @@ const Sidebar = ({ isOpen, onClose, userName = 'Rahul Sharma' }) => {
           {navItems.map((item, i) => (
             <div
               key={item.label}
-              className={`nav-item ${item.active ? 'active' : ''}`}
-              data-testid={`nav-${item.label.toLowerCase().replace(/s/g, '-')}`}
+              className={`nav-item ${activeItem === item.label ? 'active' : ''}`}
+              data-testid={`nav-${item.label.toLowerCase().replace(/ /g, '-')}`}
+              onClick={() => handleNavClick(item)}
+              style={{ cursor: 'pointer' }}
             >
               <item.icon size={18} style={{ opacity: 0.9, flexShrink: 0 }} />
               <span>{item.label}</span>

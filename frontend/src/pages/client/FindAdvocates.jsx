@@ -14,9 +14,9 @@ const FindAdvocates = () => {
   const [advocates, setAdvocates] = useState([]);
   const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState({
-    specialization: '',
+    specialization: 'all',
     location: '',
-    experience: '',
+    experience: 'all',
     search: ''
   });
   const [selectedAdvocate, setSelectedAdvocate] = useState(null);
@@ -38,7 +38,7 @@ const FindAdvocates = () => {
     try {
       const params = {
         status: 'approved',
-        ...(filters.specialization && { specialization: filters.specialization }),
+        ...(filters.specialization && filters.specialization !== 'all' && { specialization: filters.specialization }),
         ...(filters.location && { location: filters.location }),
       };
       const response = await advocateAPI.list(params);
@@ -84,7 +84,7 @@ const FindAdvocates = () => {
   };
 
   const filteredAdvocates = advocates.filter(adv => {
-    const matchesExp = !filters.experience || adv.experience_years >= parseInt(filters.experience);
+    const matchesExp = !filters.experience || filters.experience === 'all' || adv.experience_years >= parseInt(filters.experience);
     const matchesSearch = !filters.search || 
       adv.user?.full_name.toLowerCase().includes(filters.search.toLowerCase()) ||
       adv.location.toLowerCase().includes(filters.search.toLowerCase());
@@ -119,10 +119,10 @@ const FindAdvocates = () => {
             <label className="block text-sm font-medium text-slate-700 mb-2">Specialization</label>
             <Select value={filters.specialization} onValueChange={(v) => setFilters({ ...filters, specialization: v })}>
               <SelectTrigger>
-                <SelectValue placeholder="All" />
+                <SelectValue placeholder="All Specializations" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Specializations</SelectItem>
+                <SelectItem value="all">All Specializations</SelectItem>
                 <SelectItem value="divorce">Divorce</SelectItem>
                 <SelectItem value="alimony">Alimony</SelectItem>
                 <SelectItem value="child_custody">Child Custody</SelectItem>
@@ -145,10 +145,10 @@ const FindAdvocates = () => {
             <label className="block text-sm font-medium text-slate-700 mb-2">Min Experience</label>
             <Select value={filters.experience} onValueChange={(v) => setFilters({ ...filters, experience: v })}>
               <SelectTrigger>
-                <SelectValue placeholder="Any" />
+                <SelectValue placeholder="Any Experience" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Any Experience</SelectItem>
+                <SelectItem value="all">Any Experience</SelectItem>
                 <SelectItem value="2">2+ Years</SelectItem>
                 <SelectItem value="5">5+ Years</SelectItem>
                 <SelectItem value="10">10+ Years</SelectItem>

@@ -26,7 +26,7 @@ import CaseTracker from './CaseTracker';
 import FindAdvocates from './FindAdvocates';
 import MyAdvocate from './MyAdvocate';
 import MeetingRequests from './MeetingRequests';
-
+import HearingsReminders from './HearingsReminders';
 // ============ MOCK DATA ============
 const mockCaseTimeline = [
   { stage: 'Petition Filed', status: 'completed', date: '10 Jan 2025', icon: 'check' },
@@ -371,6 +371,19 @@ const ClientDashboard = () => {
           </div>
         </header>
 
+        {/* ===== CONDITIONAL PAGE RENDERING ===== */}
+        {activeItem === 'documents' && <Documents />}
+        {activeItem === 'case-tracker' && <CaseTracker />}
+        {activeItem === 'my-cases' && <CaseTracker />}
+        {activeItem === 'find-advocates' && <FindAdvocates />}
+        {activeItem === 'my-advocate' && <MyAdvocate />}
+        {activeItem === 'meeting-requests' && <MeetingRequests />}
+        {activeItem === 'hearings' && <HearingsReminders />}
+
+        {/* ===== MAIN DASHBOARD VIEW (DEFAULT) ===== */}
+        {(activeItem === 'dashboard' || activeItem === 'ai-assistant' || activeItem === 'downloads' || activeItem === 'legal-resources' || activeItem === 'settings') && (
+          <>
+
         {/* ===== STATS ROW ===== */}
         <div className="stats-row" data-testid="stats-row">
           <div className="stat-card stat-cases" data-testid="stat-active-cases">
@@ -656,6 +669,8 @@ const ClientDashboard = () => {
             </div>
           </div>
         </div>
+         </>
+        )}
       </div>
 
       {/* ========== DIALOGS ========== */}

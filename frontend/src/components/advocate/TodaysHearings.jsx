@@ -2,7 +2,7 @@ import React from 'react';
 import { Clock, Info, CheckCircle, ChevronRight, FileText } from 'lucide-react';
 
 const hearingData = {
-  caseName: 'Nida Khan vs. Faizan Malik',
+  caseName: 'Javeriya Khan vs. Faizan Malik',
   time: 'Today, 10:00 AM',
   documents: [
     { name: 'Income Proof.pdf', verified: true },

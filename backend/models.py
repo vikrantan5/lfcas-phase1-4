@@ -491,3 +491,81 @@ class AIQueryResponse(BaseModel):
     estimated_timeline: str
     important_notes: List[str]
     recommended_advocates: Optional[List[AdvocateResponse]] = None
+
+
+
+
+
+# ============= PAYMENT MODELS =============
+class PaymentStatus(str, Enum):
+    PENDING = "pending"
+    PAID = "paid"
+    FAILED = "failed"
+    REFUNDED = "refunded"
+
+
+class PaymentRequestCreate(BaseModel):
+    case_id: str
+    amount: float
+    description: str
+    due_date: Optional[datetime] = None
+
+
+class PaymentRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    advocate_id: str
+    client_id: str
+    case_id: str
+    amount: float
+    description: str
+    status: PaymentStatus = PaymentStatus.PENDING
+    due_date: Optional[datetime] = None
+    razorpay_order_id: Optional[str] = None
+    razorpay_payment_id: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class PaymentRequestResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str
+    advocate_id: str
+    client_id: str
+    case_id: str
+    amount: float
+    description: str
+    status: str
+    due_date: Optional[datetime] = None
+    razorpay_order_id: Optional[str] = None
+    razorpay_payment_id: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    case: Optional[CaseResponse] = None
+    client: Optional[UserResponse] = None
+    advocate: Optional[AdvocateResponse] = None
+
+
+class PaymentVerification(BaseModel):
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+    payment_request_id: str
+
+
+class AdvocatePaymentSettings(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    advocate_id: str
+    razorpay_key_id: str
+    razorpay_key_secret: str  # This should be encrypted in production
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class AdvocatePaymentSettingsUpdate(BaseModel):
+    razorpay_key_id: str
+    razorpay_key_secret: Optional[str] = None  # Optional for updates

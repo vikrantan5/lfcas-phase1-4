@@ -9,6 +9,8 @@ import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import ClientDashboard from './pages/client/ClientDashboard';
 import CaseDetailPage from './pages/client/CaseDetail';
+
+import ClientPayments from './pages/client/Payments';
 import AdvocateDashboard from './pages/advocate/AdvocateDashboard';
 import AdvocateCaseDetail from './pages/advocate/AdvocateCaseDetail';
 import MyCases from './pages/advocate/MyCases';
@@ -104,6 +106,14 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={['client']}>
                     <CaseDetailPage />
+                  </ProtectedRoute>
+                }
+              />
+                <Route
+                path="/client/payments"
+                element={
+                  <ProtectedRoute allowedRoles={['client']}>
+                    <ClientPayments />
                   </ProtectedRoute>
                 }
               />

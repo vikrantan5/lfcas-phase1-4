@@ -1423,6 +1423,312 @@ async def get_advocate_ratings(advocate_id: str, limit: int = 20):
     
     return [Rating(**r) for r in result.data]
 
+
+
+# ============= PAYMENT ENDPOINTS =============
+@api_router.post("/payments/settings")
+async def save_payment_settings(
+    settings: AdvocatePaymentSettingsUpdate,
+    current_user: dict = Depends(require_role([UserRole.ADVOCATE]))
+):
+    """Save or update advocate's Razorpay payment settings"""
+    try:
+        # Get advocate profile
+        adv_profile = supabase.table('advocates').select('id').eq('user_id', current_user["user_id"]).execute()
+        if not adv_profile.data or len(adv_profile.data) == 0:
+            raise HTTPException(status_code=404, detail="Advocate profile not found")
+        
+        advocate_id = adv_profile.data[0]['id']
+        
+        # Check if settings already exist
+        existing = supabase.table('advocate_payment_settings').select('*').eq('advocate_id', advocate_id).execute()
+        
+        if existing.data and len(existing.data) > 0:
+            # Update existing settings
+            update_data = {"razorpay_key_id": settings.razorpay_key_id}
+            if settings.razorpay_key_secret:  # Only update secret if provided
+                update_data["razorpay_key_secret"] = settings.razorpay_key_secret
+            
+            supabase.table('advocate_payment_settings').update(update_data).eq('advocate_id', advocate_id).execute()
+        else:
+            # Create new settings
+            if not settings.razorpay_key_secret:
+                raise HTTPException(status_code=400, detail="Razorpay secret key is required for first-time setup")
+            
+            new_settings = {
+                "advocate_id": advocate_id,
+                "razorpay_key_id": settings.razorpay_key_id,
+                "razorpay_key_secret": settings.razorpay_key_secret
+            }
+            supabase.table('advocate_payment_settings').insert(new_settings).execute()
+        
+        return {"message": "Payment settings saved successfully"}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error saving payment settings: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save payment settings: {str(e)}")
+
+
+@api_router.get("/payments/settings")
+async def get_payment_settings(
+    current_user: dict = Depends(require_role([UserRole.ADVOCATE]))
+):
+    """Get advocate's payment settings (without exposing secret)"""
+    try:
+        # Get advocate profile
+        adv_profile = supabase.table('advocates').select('id').eq('user_id', current_user["user_id"]).execute()
+        if not adv_profile.data or len(adv_profile.data) == 0:
+            raise HTTPException(status_code=404, detail="Advocate profile not found")
+        
+        advocate_id = adv_profile.data[0]['id']
+        
+        # Get settings
+        result = supabase.table('advocate_payment_settings').select('razorpay_key_id').eq('advocate_id', advocate_id).execute()
+        
+        if result.data and len(result.data) > 0:
+            return {
+                "razorpay_key_id": result.data[0].get('razorpay_key_id'),
+                "has_secret": True
+            }
+        else:
+            return {
+                "razorpay_key_id": "",
+                "has_secret": False
+            }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching payment settings: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch payment settings: {str(e)}")
+
+
+@api_router.post("/payments/request", response_model=PaymentRequestResponse)
+async def create_payment_request(
+    request_data: PaymentRequestCreate,
+    current_user: dict = Depends(require_role([UserRole.ADVOCATE]))
+):
+    """Advocate creates a payment request for a client"""
+    try:
+        # Get advocate profile
+        adv_profile = supabase.table('advocates').select('id').eq('user_id', current_user["user_id"]).execute()
+        if not adv_profile.data or len(adv_profile.data) == 0:
+            raise HTTPException(status_code=404, detail="Advocate profile not found")
+        
+        advocate_id = adv_profile.data[0]['id']
+        
+        # Verify case exists and advocate owns it
+        case = supabase.table('cases').select('*').eq('id', request_data.case_id).eq('advocate_id', advocate_id).execute()
+        if not case.data or len(case.data) == 0:
+            raise HTTPException(status_code=404, detail="Case not found or access denied")
+        
+        case_data = case.data[0]
+        client_id = case_data['client_id']
+        
+        # Get advocate's Razorpay settings
+        settings = supabase.table('advocate_payment_settings').select('*').eq('advocate_id', advocate_id).execute()
+        if not settings.data or len(settings.data) == 0:
+            raise HTTPException(status_code=400, detail="Please configure your Razorpay keys in Settings before requesting payments")
+        
+        razorpay_settings = settings.data[0]
+        
+        # Create Razorpay order (in test mode)
+        try:
+            import razorpay
+            razorpay_client = razorpay.Client(auth=(razorpay_settings['razorpay_key_id'], razorpay_settings['razorpay_key_secret']))
+            
+            # Create order
+            order_data = {
+                "amount": int(request_data.amount * 100),  # Amount in paise
+                "currency": "INR",
+                "notes": {
+                    "case_id": request_data.case_id,
+                    "advocate_id": advocate_id,
+                    "description": request_data.description
+                }
+            }
+            razorpay_order = razorpay_client.order.create(data=order_data)
+            razorpay_order_id = razorpay_order['id']
+        
+        except Exception as razorpay_error:
+            logger.error(f"Razorpay order creation failed: {str(razorpay_error)}")
+            raise HTTPException(status_code=500, detail=f"Failed to create payment order: {str(razorpay_error)}")
+        
+        # Create payment request in database
+        payment_request = {
+            "advocate_id": advocate_id,
+            "client_id": client_id,
+            "case_id": request_data.case_id,
+            "amount": request_data.amount,
+            "description": request_data.description,
+            "status": PaymentStatus.PENDING,
+            "due_date": request_data.due_date.isoformat() if request_data.due_date else None,
+            "razorpay_order_id": razorpay_order_id
+        }
+        
+        result = supabase.table('payment_requests').insert(payment_request).execute()
+        
+        if not result.data or len(result.data) == 0:
+            raise HTTPException(status_code=500, detail="Failed to create payment request")
+        
+        created_request = result.data[0]
+        
+        # Notify client
+        notification = {
+            "user_id": client_id,
+            "notification_type": NotificationType.CASE_UPDATE,
+            "title": "Payment Request",
+            "message": f"You have received a payment request of ₹{request_data.amount:,.2f} for your case.",
+            "related_id": created_request['id']
+        }
+        supabase.table('notifications').insert(notification).execute()
+        
+        return PaymentRequestResponse(**created_request)
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating payment request: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create payment request: {str(e)}")
+
+
+@api_router.get("/payments/requests", response_model=List[PaymentRequestResponse])
+async def list_payment_requests(
+    status: Optional[PaymentStatus] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """List payment requests for current user"""
+    try:
+        query = supabase.table('payment_requests').select('*, case:cases(*), client:users!payment_requests_client_id_fkey(*), advocate:advocates!payment_requests_advocate_id_fkey(*, users(*))')
+        
+        # Filter based on role
+        if current_user["role"] == UserRole.CLIENT:
+            query = query.eq('client_id', current_user["user_id"])
+        elif current_user["role"] == UserRole.ADVOCATE:
+            # Get advocate profile
+            adv_profile = supabase.table('advocates').select('id').eq('user_id', current_user["user_id"]).execute()
+            if adv_profile.data and len(adv_profile.data) > 0:
+                query = query.eq('advocate_id', adv_profile.data[0]['id'])
+            else:
+                return []
+        
+        if status:
+            query = query.eq('status', status.value)
+        
+        result = query.order('created_at', desc=True).execute()
+        
+        requests = []
+        for req in result.data:
+            case_data = req.pop('case', None)
+            client_data = req.pop('client', None)
+            advocate_data = req.pop('advocate', None)
+            
+            req_response = PaymentRequestResponse(**req)
+            if case_data:
+                req_response.case = CaseResponse(**case_data)
+            if client_data:
+                req_response.client = UserResponse(**client_data)
+            if advocate_data:
+                user_data = advocate_data.pop('users', None)
+                adv_response = AdvocateResponse(**advocate_data)
+                if user_data:
+                    adv_response.user = UserResponse(**user_data)
+                req_response.advocate = adv_response
+            
+            requests.append(req_response)
+        
+        return requests
+    
+    except Exception as e:
+        logger.error(f"Error listing payment requests: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to list payment requests: {str(e)}")
+
+
+@api_router.post("/payments/verify")
+async def verify_payment(
+    verification: PaymentVerification,
+    current_user: dict = Depends(require_role([UserRole.CLIENT]))
+):
+    """Verify and complete a payment"""
+    try:
+        # Get payment request
+        payment_req = supabase.table('payment_requests').select('*, advocate:advocates!payment_requests_advocate_id_fkey(*)').eq('id', verification.payment_request_id).execute()
+        
+        if not payment_req.data or len(payment_req.data) == 0:
+            raise HTTPException(status_code=404, detail="Payment request not found")
+        
+        payment_data = payment_req.data[0]
+        
+        # Verify client owns this payment
+        if payment_data['client_id'] != current_user["user_id"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Get advocate's Razorpay settings for verification
+        advocate_data = payment_data.get('advocate')
+        if not advocate_data:
+            raise HTTPException(status_code=500, detail="Advocate data not found")
+        
+        advocate_id = advocate_data['id']
+        settings = supabase.table('advocate_payment_settings').select('*').eq('advocate_id', advocate_id).execute()
+        
+        if not settings.data or len(settings.data) == 0:
+            raise HTTPException(status_code=500, detail="Payment settings not found")
+        
+        razorpay_settings = settings.data[0]
+        
+        # Verify payment signature with Razorpay
+        try:
+            import razorpay
+            razorpay_client = razorpay.Client(auth=(razorpay_settings['razorpay_key_id'], razorpay_settings['razorpay_key_secret']))
+            
+            # Verify signature
+            params_dict = {
+                'razorpay_order_id': verification.razorpay_order_id,
+                'razorpay_payment_id': verification.razorpay_payment_id,
+                'razorpay_signature': verification.razorpay_signature
+            }
+            
+            razorpay_client.utility.verify_payment_signature(params_dict)
+            
+        except razorpay.errors.SignatureVerificationError:
+            raise HTTPException(status_code=400, detail="Invalid payment signature")
+        except Exception as razorpay_error:
+            logger.error(f"Razorpay verification failed: {str(razorpay_error)}")
+            raise HTTPException(status_code=500, detail=f"Payment verification failed: {str(razorpay_error)}")
+        
+        # Update payment request status
+        supabase.table('payment_requests').update({
+            "status": PaymentStatus.PAID,
+            "razorpay_payment_id": verification.razorpay_payment_id
+        }).eq('id', verification.payment_request_id).execute()
+        
+        # Notify advocate
+        advocate_user = advocate_data.get('users') or advocate_data.get('user_id')
+        if advocate_user:
+            advocate_user_id = advocate_user if isinstance(advocate_user, str) else advocate_user.get('id')
+            notification = {
+                "user_id": advocate_user_id,
+                "notification_type": NotificationType.CASE_UPDATE,
+                "title": "Payment Received",
+                "message": f"Payment of ₹{payment_data['amount']:,.2f} has been received from your client.",
+                "related_id": verification.payment_request_id
+            }
+            supabase.table('notifications').insert(notification).execute()
+        
+        return {
+            "message": "Payment verified successfully",
+            "status": "paid"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error verifying payment: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Payment verification failed: {str(e)}")
+
+
 # ============= CLIENT DASHBOARD ENDPOINT =============
 @api_router.get("/client/dashboard-summary")
 async def get_client_dashboard_summary(

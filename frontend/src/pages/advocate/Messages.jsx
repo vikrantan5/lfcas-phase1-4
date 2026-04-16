@@ -100,16 +100,16 @@ const Messages = () => {
   };
 
   return (
-    <div className="adv-dashboard">
+    <div className="advocate-dashboard">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} userName={user?.full_name} />
       
-      <div className="dash-main">
+      <div className="adv-main">
         <DashboardHeader 
           userName={user?.full_name} 
           onMenuClick={() => setSidebarOpen(!sidebarOpen)} 
         />
         
-        <div className="dash-content" style={{ padding: '24px' }}>
+        <div className="adv-content" style={{ padding: '24px' }}>
           {/* Page Header */}
           <div style={{ marginBottom: 24 }}>
             <h1 style={{ fontSize: 28, fontWeight: 700, color: '#1A0A3E', margin: 0, marginBottom: 4 }}>Messages</h1>

@@ -264,11 +264,11 @@ const Documents = () => {
 
   if (loading) {
     return (
-      <div className="adv-dashboard">
+      <div className="advocate-dashboard">
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} userName={user?.full_name} />
-        <div className="dash-main">
-          <DashboardHeader userName={user?.full_name} onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
-          <div className="dash-content" style={{ padding: '24px', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
+        <div className="adv-main">
+          <DashboardHeader userName={user?.full_name} onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
+          <div className="adv-content" style={{ padding: '24px', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
             <Loader2 className="animate-spin" size={48} color="#724AE3" />
           </div>
         </div>
@@ -277,13 +277,13 @@ const Documents = () => {
   }
 
   return (
-    <div className="adv-dashboard">
+    <div className="advocate-dashboard">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} userName={user?.full_name} />
       
-      <div className="dash-main">
-        <DashboardHeader userName={user?.full_name} onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
+      <div className="adv-main">
+        <DashboardHeader userName={user?.full_name} onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
         
-        <div className="dash-content" style={{ padding: '24px' }}>
+        <div className="adv-content" style={{ padding: '24px' }}>
           {/* Page Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
             <div>
@@ -641,8 +641,8 @@ const Documents = () => {
           </div>
         </DialogContent>
       </Dialog>
+    
     </div>
   );
 };
-
 export default Documents;

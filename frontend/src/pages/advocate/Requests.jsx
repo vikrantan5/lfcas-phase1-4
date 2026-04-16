@@ -152,16 +152,16 @@ const Requests = () => {
   };
 
   return (
-    <div className="adv-dashboard">
+    <div className="advocate-dashboard">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} userName={user?.full_name} />
       
-      <div className="dash-main">
+      <div className="adv-main">
         <DashboardHeader 
           userName={user?.full_name} 
           onMenuClick={() => setSidebarOpen(!sidebarOpen)} 
         />
         
-        <div className="dash-content" style={{ padding: '24px' }}>
+        <div className="adv-content" style={{ padding: '24px' }}>
           {/* Page Header */}
           <div style={{ marginBottom: 24 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>

@@ -2139,6 +2139,244 @@ async def root():
         ],
         "flow": "Voice Conversation → AI Analysis → Case Draft → Advocate Selection → Meeting Request → Case Creation"
     }
+# ============= USER PROFILE ENDPOINTS (MISSING) =============
+@api_router.get("/users/profile")
+async def get_user_profile(current_user: dict = Depends(get_current_user)):
+    """Get current user profile"""
+    try:
+        user = supabase.table('users').select('*').eq('id', current_user["user_id"]).execute()
+        if not user.data or len(user.data) == 0:
+            raise HTTPException(status_code=404, detail="User not found")
+        return user.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching user profile: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch profile")
+
+
+@api_router.patch("/users/profile")
+async def update_user_profile(
+    profile_data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Update user profile"""
+    try:
+        # Only allow updating specific fields
+        allowed_fields = ['full_name', 'phone']
+        update_data = {k: v for k, v in profile_data.items() if k in allowed_fields}
+        
+        if not update_data:
+            raise HTTPException(status_code=400, detail="No valid fields to update")
+        
+        result = supabase.table('users').update(update_data).eq('id', current_user["user_id"]).execute()
+        
+        if not result.data or len(result.data) == 0:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        return {"message": "Profile updated successfully", "user": result.data[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating profile: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update profile")
+
+
+# ============= CLIENT DOWNLOADS ENDPOINT (MISSING) =============
+@api_router.get("/client/downloads")
+async def get_client_downloads(current_user: dict = Depends(require_role([UserRole.CLIENT]))):
+    """Get all downloadable documents for client"""
+    try:
+        user_id = current_user["user_id"]
+        
+        # Get all cases for this client
+        cases_result = supabase.table('cases').select('id, title').eq('client_id', user_id).execute()
+        case_ids = [case['id'] for case in cases_result.data] if cases_result.data else []
+        
+        downloads = []
+        
+        if case_ids:
+            # Get all documents for these cases
+            docs_result = supabase.table('documents').select('*').in_('case_id', case_ids).order('created_at', desc=True).execute()
+            
+            if docs_result.data:
+                for doc in docs_result.data:
+                    # Get case title
+                    case_title = next((c['title'] for c in cases_result.data if c['id'] == doc['case_id']), 'Unknown Case')
+                    
+                    downloads.append({
+                        "id": doc['id'],
+                        "name": doc['document_name'],
+                        "type": doc['document_type'],
+                        "case_title": case_title,
+                        "url": doc.get('cloudinary_url', ''),
+                        "size": doc.get('file_size', 0),
+                        "uploaded_at": doc['created_at'],
+                        "description": doc.get('description', '')
+                    })
+        
+        # Add some mock legal templates as downloadable resources
+        mock_templates = [
+            {
+                "id": "template_1",
+                "name": "Divorce Petition Template",
+                "type": "pdf",
+                "case_title": "Legal Templates",
+                "url": "https://example.com/divorce-template.pdf",
+                "size": 524288,
+                "uploaded_at": datetime.now(timezone.utc).isoformat(),
+                "description": "Standard divorce petition template for reference"
+            },
+            {
+                "id": "template_2",
+                "name": "Child Custody Agreement",
+                "type": "pdf",
+                "case_title": "Legal Templates",
+                "url": "https://example.com/custody-template.pdf",
+                "size": 362144,
+                "uploaded_at": datetime.now(timezone.utc).isoformat(),
+                "description": "Sample child custody agreement template"
+            }
+        ]
+        
+        # Add mock templates if no real documents
+        if len(downloads) == 0:
+            downloads.extend(mock_templates)
+        
+        return {"downloads": downloads}
+    
+    except Exception as e:
+        logger.error(f"Error fetching downloads: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch downloads")
+
+
+# ============= LEGAL RESOURCES ENDPOINT (MISSING) =============
+@api_router.get("/legal-resources")
+async def get_legal_resources(category: str = "all"):
+    """Get legal resources (articles, guides, checklists) by category"""
+    try:
+        # Define mock legal resources
+        all_resources = [
+            {
+                "id": "res_1",
+                "title": "Complete Guide to Divorce in India",
+                "description": "A comprehensive guide covering all aspects of divorce proceedings including grounds for divorce, mutual consent divorce, and contested divorce procedures.",
+                "content_type": "guide",
+                "category": "divorce",
+                "tags": ["divorce", "legal procedure", "family law"],
+                "reading_time": "12 min read",
+                "thumbnail": None
+            },
+            {
+                "id": "res_2",
+                "title": "Understanding Child Custody Laws",
+                "description": "Learn about child custody types, factors considered by courts, and how to prepare for custody hearings in India.",
+                "content_type": "article",
+                "category": "child_custody",
+                "tags": ["child custody", "parental rights", "family court"],
+                "reading_time": "8 min read",
+                "thumbnail": None
+            },
+            {
+                "id": "res_3",
+                "title": "Alimony Rights and Calculation",
+                "description": "Understand your rights to alimony, how it's calculated, and the legal provisions under different personal laws.",
+                "content_type": "article",
+                "category": "alimony",
+                "tags": ["alimony", "maintenance", "financial support"],
+                "reading_time": "10 min read",
+                "thumbnail": None
+            },
+            {
+                "id": "res_4",
+                "title": "Domestic Violence Act: Your Rights",
+                "description": "A detailed overview of the Protection of Women from Domestic Violence Act, 2005 and the remedies available.",
+                "content_type": "guide",
+                "category": "domestic_violence",
+                "tags": ["domestic violence", "protection order", "women's rights"],
+                "reading_time": "15 min read",
+                "thumbnail": None
+            },
+            {
+                "id": "res_5",
+                "title": "Documents Required for Divorce",
+                "description": "A complete checklist of documents needed for filing a divorce petition in India.",
+                "content_type": "checklist",
+                "category": "divorce",
+                "tags": ["divorce", "documents", "checklist"],
+                "reading_time": "5 min read",
+                "thumbnail": None
+            },
+            {
+                "id": "res_6",
+                "title": "Family Court Procedures Explained",
+                "description": "Step-by-step explanation of how family court proceedings work in India.",
+                "content_type": "article",
+                "category": "general",
+                "tags": ["family court", "legal procedure", "court process"],
+                "reading_time": "10 min read",
+                "thumbnail": None
+            },
+            {
+                "id": "res_7",
+                "title": "Maintenance and Alimony Calculator Guide",
+                "description": "Understand how courts calculate maintenance and alimony amounts based on various factors.",
+                "content_type": "guide",
+                "category": "alimony",
+                "tags": ["alimony calculation", "maintenance", "financial planning"],
+                "reading_time": "7 min read",
+                "thumbnail": None
+            },
+            {
+                "id": "res_8",
+                "title": "Child Support: Legal Obligations",
+                "description": "Everything you need to know about child support obligations and enforcement.",
+                "content_type": "article",
+                "category": "child_custody",
+                "tags": ["child support", "parental obligations", "financial support"],
+                "reading_time": "9 min read",
+                "thumbnail": None
+            },
+            {
+                "id": "res_9",
+                "title": "Legal Glossary: Family Law Terms",
+                "description": "A comprehensive glossary of common legal terms used in family law cases.",
+                "content_type": "glossary",
+                "category": "general",
+                "tags": ["legal terms", "glossary", "definitions"],
+                "reading_time": "6 min read",
+                "thumbnail": None
+            },
+            {
+                "id": "res_10",
+                "title": "Preparing for Your First Court Hearing",
+                "description": "A practical guide to help you prepare for your first appearance in family court.",
+                "content_type": "guide",
+                "category": "general",
+                "tags": ["court hearing", "preparation", "legal advice"],
+                "reading_time": "11 min read",
+                "thumbnail": None
+            }
+        ]
+        
+        # Filter by category
+        if category and category != "all":
+            filtered_resources = [r for r in all_resources if r["category"] == category]
+        else:
+            filtered_resources = all_resources
+        
+        # Get unique categories
+        categories = ["all", "divorce", "child_custody", "alimony", "domestic_violence", "general"]
+        
+        return {
+            "resources": filtered_resources,
+            "categories": categories,
+            "total": len(filtered_resources)
+        }
+    
+    except Exception as e:
+        logger.error(f"Error fetching legal resources: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch legal resources")
 
 
 # Include router

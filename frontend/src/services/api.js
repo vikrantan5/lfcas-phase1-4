@@ -44,6 +44,7 @@ export const advocateAPI = {
   list: (params) => api.get('/advocates', { params }),
   getById: (id) => api.get(`/advocates/${id}`),
   updateStatus: (id, status) => api.patch(`/advocates/${id}/status`, { new_status: status }),
+    updateProfile: (id, data) => api.patch(`/advocates/${id}`, data),
 };
 
 // AI APIs

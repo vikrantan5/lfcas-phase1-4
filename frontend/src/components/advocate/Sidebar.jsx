@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Home, Briefcase, Search, Calendar, FileText, DollarSign,
   MessageSquare, Users, Settings, ChevronDown, ChevronRight,
@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 
 const navItems = [
-  { icon: Home, label: 'Dashboard', badge: 5, active: true, path: '/advocate/dashboard' },
+  { icon: Home, label: 'Dashboard', badge: 5, path: '/advocate/dashboard' },
   { icon: Briefcase, label: 'My Cases', hasChevron: true, path: '/advocate/cases' },
   { icon: Search, label: 'Case Tracker', path: '/advocate/case-tracker' },
   { icon: Calendar, label: 'Calendar', badge: 4, path: '/advocate/calendar' },
@@ -21,10 +21,13 @@ const navItems = [
 
 const Sidebar = ({ isOpen, onClose, userName = 'Rahul Sharma' }) => {
   const navigate = useNavigate();
-  const [activeItem, setActiveItem] = useState('Dashboard');
+  const location = useLocation();
+
+  const isActive = (path) => {
+    return location.pathname === path || location.pathname.startsWith(path + '/');
+  };
 
   const handleNavClick = (item) => {
-    setActiveItem(item.label);
     if (item.path) {
       navigate(item.path);
     }
@@ -67,7 +70,7 @@ const Sidebar = ({ isOpen, onClose, userName = 'Rahul Sharma' }) => {
           {navItems.map((item, i) => (
             <div
               key={item.label}
-              className={`nav-item ${activeItem === item.label ? 'active' : ''}`}
+               className={`nav-item ${isActive(item.path) ? 'active' : ''}`}
               data-testid={`nav-${item.label.toLowerCase().replace(/ /g, '-')}`}
               onClick={() => handleNavClick(item)}
               style={{ cursor: 'pointer' }}

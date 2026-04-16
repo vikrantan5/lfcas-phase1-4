@@ -1,5 +1,6 @@
 import React from 'react';
 import { Menu, Search, Bell, MessageSquare, Star } from 'lucide-react';
+import NotificationDropdown from './NotificationDropdown';
 
 const DashboardHeader = ({ onToggleSidebar, userName = 'Rahul Sharma' }) => {
   return (
@@ -32,13 +33,7 @@ const DashboardHeader = ({ onToggleSidebar, userName = 'Rahul Sharma' }) => {
         </div>
 
         {/* Notifications */}
-        <button
-          style={{ position: 'relative', background: 'none', border: 'none', cursor: 'pointer', padding: 6 }}
-          data-testid="notifications-bell"
-        >
-          <Bell size={20} color="#4A4A4A" />
-          <span className="notif-dot">1</span>
-        </button>
+  <NotificationDropdown />
 
         {/* Messages */}
         <button

@@ -195,11 +195,11 @@ async def list_advocates(
     query = supabase.table('advocates').select('*, users!inner(*)')
     
     if status:
-        query = query.eq('status', status)
+        query = query.eq('status', status.value)
     if location:
         query = query.ilike('location', f'%{location}%')
     if specialization:
-        query = query.contains('specialization', [specialization])
+        query = query.contains('specialization', [specialization.value])
     
     result = query.limit(limit).execute()
     

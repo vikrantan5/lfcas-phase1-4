@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { caseAPI, advocateAPI, messageAPI, ratingAPI } from '../../services/api';
+import { caseAPI, advocateAPI, messageAPI, ratingAPI, dashboardAPI } from '../../services/api';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../components/ui/dialog';
+import { Input } from '../../components/ui/input';
+import { Textarea } from '../../components/ui/textarea';
+import { Label } from '../../components/ui/label';
 import { Star, MapPin, Award, Briefcase, Phone, Mail, MessageSquare, FileText, Calendar, Loader2, Send } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
 import RatingDialog from '../../components/RatingDialog';
@@ -16,6 +20,11 @@ const MyAdvocate = () => {
   const [loading, setLoading] = useState(false);
   const [showRatingDialog, setShowRatingDialog] = useState(false);
   const [selectedCase, setSelectedCase] = useState(null);
+    const [showMessageDialog, setShowMessageDialog] = useState(false);
+  const [showEmailDialog, setShowEmailDialog] = useState(false);
+  const [messageContent, setMessageContent] = useState('');
+  const [emailData, setEmailData] = useState({ subject: '', message: '' });
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -52,6 +61,53 @@ const MyAdvocate = () => {
 
   const handleRatingSuccess = () => {
     loadData();
+  };
+
+
+  const handleSendMessage = async () => {
+    if (!messageContent.trim() || !advocate || cases.length === 0) {
+      toast({ title: "Error", description: "Please enter a message", variant: "destructive" });
+      return;
+    }
+
+    setSending(true);
+    try {
+      await messageAPI.send({
+        case_id: cases[0].id, // Use first case
+        content: messageContent,
+        message_type: 'text'
+      });
+      toast({ title: "Success", description: "Message sent to advocate" });
+      setShowMessageDialog(false);
+      setMessageContent('');
+    } catch (error) {
+      toast({ title: "Error", description: error.response?.data?.detail || "Failed to send message", variant: "destructive" });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleSendEmail = async () => {
+    if (!emailData.subject.trim() || !emailData.message.trim() || !advocate) {
+      toast({ title: "Error", description: "Please fill all fields", variant: "destructive" });
+      return;
+    }
+
+    setSending(true);
+    try {
+      await dashboardAPI.sendAdvocateEmail({
+        advocate_id: advocate.id,
+        subject: emailData.subject,
+        message: emailData.message
+      });
+      toast({ title: "Success", description: "Email sent to advocate" });
+      setShowEmailDialog(false);
+      setEmailData({ subject: '', message: '' });
+    } catch (error) {
+      toast({ title: "Error", description: error.response?.data?.detail || "Failed to send email", variant: "destructive" });
+    } finally {
+      setSending(false);
+    }
   };
 
   if (loading) {

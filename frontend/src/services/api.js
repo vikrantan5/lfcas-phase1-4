@@ -82,6 +82,11 @@ export const dashboardAPI = {
   getSummary: () => api.get('/client/dashboard-summary'),
    getReminders: () => api.get('/client/reminders'),
   getRecommendedAdvocates: () => api.get('/client/recommended-advocates'),
+   getDownloads: () => api.get('/client/downloads'),
+  getLegalResources: (category) => api.get('/legal-resources', { params: { category } }),
+  getUserProfile: () => api.get('/users/profile'),
+  updateUserProfile: (data) => api.patch('/users/profile', data),
+  sendAdvocateEmail: (data) => api.post('/client/send-advocate-email', data),
 };
 // Hearing APIs
 export const hearingAPI = {

@@ -27,6 +27,9 @@ import FindAdvocates from './FindAdvocates';
 import MyAdvocate from './MyAdvocate';
 import MeetingRequests from './MeetingRequests';
 import HearingsReminders from './HearingsReminders';
+import Downloads from './Downloads';
+import LegalResources from './LegalResources';
+import SettingsPage from './Settings';
 // ============ MOCK DATA ============
 const mockCaseTimeline = [
   { stage: 'Petition Filed', status: 'completed', date: '10 Jan 2025', icon: 'check' },
@@ -379,9 +382,12 @@ const ClientDashboard = () => {
         {activeItem === 'my-advocate' && <MyAdvocate />}
         {activeItem === 'meeting-requests' && <MeetingRequests />}
         {activeItem === 'hearings' && <HearingsReminders />}
+          {activeItem === 'downloads' && <Downloads />}
+        {activeItem === 'legal-resources' && <LegalResources />}
+        {activeItem === 'settings' && <SettingsPage />}
 
         {/* ===== MAIN DASHBOARD VIEW (DEFAULT) ===== */}
-        {(activeItem === 'dashboard' || activeItem === 'ai-assistant' || activeItem === 'downloads' || activeItem === 'legal-resources' || activeItem === 'settings') && (
+           {(activeItem === 'dashboard' || activeItem === 'ai-assistant') && (
           <>
 
         {/* ===== STATS ROW ===== */}

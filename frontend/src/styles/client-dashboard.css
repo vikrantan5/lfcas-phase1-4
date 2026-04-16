@@ -295,22 +295,23 @@
    ============================================ */
 .dashboard-grid {
   display: grid;
-  grid-template-columns: 2fr 1fr;
+  grid-template-columns: 1fr 1fr 280px;
   grid-template-rows: auto;
   gap: 20px;
   padding: 24px 32px 40px;
   grid-template-areas:
-    "ai-assistant   timeline"
-    "cases-overview  reminders"
-    "quick-actions   advocates";
+    "ai-assistant   timeline       timeline"
+    "cases-overview  reminders     insights"
+    "quick-actions   advocates     insights";
 }
 
 .grid-ai-assistant { grid-area: ai-assistant; }
 .grid-timeline { grid-area: timeline; }
 .grid-cases-overview { grid-area: cases-overview; }
-.grid-reminders { grid-area: reminders; display: flex; flex-direction: column; gap: 20px; }
+.grid-reminders { grid-area: reminders; }
 .grid-quick-actions { grid-area: quick-actions; }
 .grid-advocates { grid-area: advocates; }
+.grid-insights { grid-area: insights; }
 
 /* ---- Section Headers ---- */
 .section-header {

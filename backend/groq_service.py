@@ -524,3 +524,25 @@ def get_advocate_recommendation_criteria(case_type: CaseType, location: str) -> 
         ],
         "limit": 5
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# 2026-04-16 20:21:27,376 - httpx - INFO - HTTP Request: POST https://epnzbuofcjffunjnxrgj.supabase.co/rest/v1/ai_case_analysis "HTTP/2 400 Bad Request"
+# 2026-04-16 20:21:27,379 - server - ERROR - Error processing voice conversation: {'message': 'value too long for type character varying(100)', 'code': '22001', 'hint': None, 'details': None}
+# INFO:     127.0.0.1:60352 - "POST /api/voice/process-conversation HTTP/1.1" 500 Internal Server Error

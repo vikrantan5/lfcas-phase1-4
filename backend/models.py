@@ -585,10 +585,7 @@ class DocumentEditStatus(str, Enum):
 
 class DocumentEditRequestCreate(BaseModel):
     document_id: str
-    case_id: str
-    advocate_id: str
-    request_reason: Optional[str] = None
-
+    reason: Optional[str] = None
 
 class DocumentEditRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -607,16 +604,25 @@ class DocumentEditRequest(BaseModel):
     expires_at: Optional[datetime] = None
 
 
-class DocumentEditRequestResponse(DocumentEditRequest):
-    document_name: Optional[str] = None
-    client_name: Optional[str] = None
-    case_title: Optional[str] = None
-
+class DocumentEditRequestResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str
+    document_id: str
+    client_id: str
+    advocate_id: str
+    status: str
+    reason: Optional[str] = None
+    response_notes: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    # Related data
+    document: Optional[Document] = None
+    client: Optional[UserResponse] = None
 
 class DocumentEditRequestUpdate(BaseModel):
     status: DocumentEditStatus
-    advocate_notes: Optional[str] = None
-    edit_duration_hours: Optional[int] = 24  # How long the document remains editable
+    response_notes: Optional[str] = None
 
 
 class DocumentVersion(BaseModel):

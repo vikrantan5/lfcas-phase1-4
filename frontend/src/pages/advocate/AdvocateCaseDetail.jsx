@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSocket } from '../../contexts/SocketContext';
-import { caseAPI, documentAPI, hearingAPI, messageAPI } from '../../services/api';
+import { caseAPI, documentAPI, hearingAPI, messageAPI, paymentAPI } from '../../services/api';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
@@ -52,6 +52,17 @@ const AdvocateCaseDetail = () => {
   const [newStage, setNewStage] = useState('');
   const [stageNotes, setStageNotes] = useState('');
   const [updatingStage, setUpdatingStage] = useState(false);
+
+
+
+   // Payment Request State
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [paymentData, setPaymentData] = useState({
+    amount: '',
+    description: '',
+    due_date: ''
+  });
+  const [requestingPayment, setRequestingPayment] = useState(false);
 
   const caseStages = [
     { value: 'INITIATED', label: 'Initiated' },
@@ -264,6 +275,36 @@ const AdvocateCaseDetail = () => {
     }
   };
 
+
+
+   const handleRequestPayment = async () => {
+    if (!paymentData.amount || !paymentData.description) {
+      toast({ title: "Error", description: "Please fill all required fields", variant: "destructive" });
+      return;
+    }
+
+    setRequestingPayment(true);
+    try {
+      await paymentAPI.createRequest({
+        case_id: caseId,
+        amount: parseFloat(paymentData.amount),
+        description: paymentData.description,
+        due_date: paymentData.due_date || null
+      });
+
+      toast({ title: "Success", description: "Payment request sent to client" });
+      setShowPaymentDialog(false);
+      setPaymentData({ amount: '', description: '', due_date: '' });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error.response?.data?.detail || "Failed to create payment request",
+        variant: "destructive"
+      });
+    } finally {
+      setRequestingPayment(false);
+    }
+  };
   const getStatusColor = (status) => {
     const colors = {
       initiated: 'bg-blue-100 text-blue-800',
@@ -331,6 +372,10 @@ const AdvocateCaseDetail = () => {
               </div>
             </div>
             <div className="flex items-center space-x-3">
+                  <Button onClick={() => setShowPaymentDialog(true)} variant="default">
+                <Plus className="w-4 h-4 mr-2" />
+                Request Payment
+              </Button>
               <Button onClick={() => setShowHearingDialog(true)}>
                 <Calendar className="w-4 h-4 mr-2" />
                 Schedule Hearing

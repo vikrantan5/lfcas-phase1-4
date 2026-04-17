@@ -14,7 +14,7 @@ import {
   Calendar, AlertCircle, UserCheck, Star, Sparkles, ArrowRight, ChevronRight, Zap,
   Home, Bot, FolderOpen, ClipboardCheck, Bell, Search, UserPlus, MessageSquare,
   Download, BookOpen, Settings, Crown, Send, Upload, FileDown, ChevronDown,
-  MapPin, Gavel, Eye
+ MapPin, Gavel, Eye, CreditCard
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../hooks/use-toast';
@@ -31,6 +31,8 @@ import HearingsReminders from './HearingsReminders';
 import Downloads from './Downloads';
 import LegalResources from './LegalResources';
 import SettingsPage from './Settings';
+
+import PaymentsPage from './Payments';
 import { getAvatarUrl, handleAvatarError } from '../../lib/utils';
 // ============ MOCK DATA ============
 const mockCaseTimeline = [
@@ -60,6 +62,8 @@ const Sidebar = ({ activeItem, setActiveItem, onStartAI }) => {
         { id: 'find-advocates', label: 'Find Advocates', icon: Search, badge: '7' },
         { id: 'my-advocate', label: 'My Advocate', icon: UserCheck },
         { id: 'meeting-requests', label: 'Meeting Requests', icon: MessageSquare },
+           { id: 'payments', label: 'Payments', icon: CreditCard },
+
       ]
     },
     {
@@ -383,6 +387,7 @@ const ClientDashboard = () => {
         {activeItem === 'find-advocates' && <FindAdvocates />}
         {activeItem === 'my-advocate' && <MyAdvocate />}
         {activeItem === 'meeting-requests' && <MeetingRequests />}
+         {activeItem === 'payments' && <PaymentsPage />}
         {activeItem === 'hearings' && <HearingsReminders />}
           {activeItem === 'downloads' && <Downloads />}
         {activeItem === 'legal-resources' && <LegalResources />}

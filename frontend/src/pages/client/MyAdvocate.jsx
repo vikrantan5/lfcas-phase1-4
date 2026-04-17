@@ -152,8 +152,12 @@ const MyAdvocate = () => {
       {/* Advocate Profile Card */}
       <Card className="p-8">
         <div className="flex items-start gap-6">
-          <div className="w-24 h-24 bg-gradient-to-br from-violet-500 to-purple-600 rounded-full flex items-center justify-center text-white text-4xl font-bold flex-shrink-0">
-            {advocate.user?.full_name?.charAt(0) || 'A'}
+            <div className="w-24 h-24 rounded-full flex-shrink-0 overflow-hidden">
+            <img 
+              src={advocate.user?.profile_image_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(advocate.user?.full_name || 'Advocate')}&size=96&background=724AE3&color=fff&font-size=0.4`}
+              alt={advocate.user?.full_name || 'Advocate'}
+              className="w-full h-full object-cover"
+            />
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2">

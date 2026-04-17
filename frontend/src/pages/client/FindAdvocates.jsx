@@ -181,8 +181,12 @@ const FindAdvocates = () => {
             {filteredAdvocates.map(advocate => (
               <Card key={advocate.id} className="p-6 hover:shadow-lg transition-shadow" data-testid={`advocate-card-${advocate.id}`}>
                 <div className="flex items-start gap-4 mb-4">
-                  <div className="w-16 h-16 bg-gradient-to-br from-violet-500 to-purple-600 rounded-full flex items-center justify-center text-white text-2xl font-bold">
-                    {advocate.user?.full_name?.charAt(0) || 'A'}
+                  <div className="w-16 h-16 rounded-full overflow-hidden flex-shrink-0">
+                    <img 
+                      src={advocate.user?.profile_image_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(advocate.user?.full_name || 'Advocate')}&size=64&background=724AE3&color=fff&font-size=0.4`}
+                      alt={advocate.user?.full_name || 'Advocate'}
+                      className="w-full h-full object-cover"
+                    />
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">

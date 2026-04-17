@@ -1,46 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
-import ClientSidebar from '../../components/client/Sidebar';
-import ClientHeader from '../../components/client/Header';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
-import { Button } from '../../components/ui/button';
-import { 
-  DollarSign, Loader2, CheckCircle, Clock, AlertCircle,
-  Calendar, CreditCard, FileText, Download, ExternalLink
-} from 'lucide-react';
-import { useToast } from '../../hooks/use-toast';
 import { paymentAPI } from '../../services/api';
-import '../../styles/client-dashboard.css';
+import { Card } from '../../components/ui/card';
+import { Button } from '../../components/ui/button';
+import { Badge } from '../../components/ui/badge';
+import { Loader2, CreditCard, FileText, Calendar, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { useToast } from '../../hooks/use-toast';
 
 const Payments = () => {
-  const { user } = useAuth();
   const { toast } = useToast();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [paymentRequests, setPaymentRequests] = useState([]);
-  const [paying, setPaying] = useState(null);
-  const [razorpayLoaded, setRazorpayLoaded] = useState(false);
+  const [payments, setPayments] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [processingPayment, setProcessingPayment] = useState(null);
 
   useEffect(() => {
-    loadPaymentRequests();
-    loadRazorpayScript();
+    loadPayments();
   }, []);
 
-  const loadRazorpayScript = () => {
-    const script = document.createElement('script');
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    script.async = true;
-    script.onload = () => setRazorpayLoaded(true);
-    document.body.appendChild(script);
-  };
-
-  const loadPaymentRequests = async () => {
+  const loadPayments = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
       const response = await paymentAPI.getRequests();
-      setPaymentRequests(response.data || []);
+      setPayments(response.data || []);
     } catch (error) {
-      console.error('Failed to load payment requests:', error);
+      console.error('Failed to load payments:', error);
       toast({
         title: "Error",
         description: "Failed to load payment requests",
@@ -51,360 +33,211 @@ const Payments = () => {
     }
   };
 
-  const handlePayment = async (paymentRequest) => {
-    if (!razorpayLoaded) {
-      toast({
-        title: "Payment Gateway Loading",
-        description: "Please wait while we load the payment gateway...",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setPaying(paymentRequest.id);
+  const handlePay = async (payment) => {
+    setProcessingPayment(payment.id);
 
     try {
-      // Get advocate's Razorpay public key
-      const keyResponse = await paymentAPI.getAdvocateKey(paymentRequest.advocate_id);
-      const advocateKey = keyResponse.data.razorpay_key_id;
-      
-      const options = {
-        key: advocateKey,
-        amount: paymentRequest.amount * 100, // Amount in paise
-        currency: 'INR',
-        name: 'LFCAS Payment',
-        description: paymentRequest.description,
-        order_id: paymentRequest.razorpay_order_id,
-        handler: async function (response) {
-          // Payment successful, verify on backend
-          try {
-            await paymentAPI.verify({
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-              payment_request_id: paymentRequest.id
-            });
+      // Get advocate's Razorpay key
+      const keyResponse = await paymentAPI.getAdvocateKey(payment.advocate_id);
+      const razorpayKey = keyResponse.data.razorpay_key_id;
 
-            toast({
-              title: "Payment Successful",
-              description: "Your payment has been processed successfully",
-            });
+      if (!razorpayKey) {
+        toast({
+          title: "Error",
+          description: "Advocate's payment settings not configured",
+          variant: "destructive"
+        });
+        setProcessingPayment(null);
+        return;
+      }
 
-            loadPaymentRequests();
-          } catch (error) {
-            console.error('Payment verification failed:', error);
-            toast({
-              title: "Verification Failed",
-              description: "Payment completed but verification failed. Please contact support.",
-              variant: "destructive"
-            });
-          } finally {
-            setPaying(null);
+      // Load Razorpay script
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.async = true;
+      document.body.appendChild(script);
+
+      script.onload = () => {
+        const options = {
+          key: razorpayKey,
+          amount: Math.round(payment.amount * 100), // Amount in paise
+          currency: 'INR',
+          name: 'LFCAS Payment',
+          description: payment.description,
+          order_id: payment.razorpay_order_id,
+          handler: async function (response) {
+            try {
+              // Verify payment
+              await paymentAPI.verify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                payment_request_id: payment.id
+              });
+
+              toast({
+                title: "Payment Successful",
+                description: `Payment of ₹${payment.amount.toFixed(2)} completed successfully`
+              });
+
+              loadPayments();
+            } catch (error) {
+              toast({
+                title: "Verification Failed",
+                description: error.response?.data?.detail || "Payment verification failed",
+                variant: "destructive"
+              });
+            } finally {
+              setProcessingPayment(null);
+            }
+          },
+          prefill: {
+            email: 'client@example.com',
+          },
+          theme: {
+            color: '#724AE3'
+          },
+          modal: {
+            ondismiss: function() {
+              setProcessingPayment(null);
+            }
           }
-        },
-        prefill: {
-          name: user?.full_name || '',
-          email: user?.email || '',
-          contact: user?.phone || ''
-        },
-        theme: {
-          color: '#815DF5'
-        },
-        modal: {
-          ondismiss: function() {
-            setPaying(null);
-          }
-        }
+        };
+
+        const rzp = new window.Razorpay(options);
+        rzp.open();
       };
 
-      const rzp = new window.Razorpay(options);
-      rzp.open();
+      script.onerror = () => {
+        toast({
+          title: "Error",
+          description: "Failed to load payment gateway",
+          variant: "destructive"
+        });
+        setProcessingPayment(null);
+      };
 
     } catch (error) {
-      console.error('Payment initiation failed:', error);
       toast({
-        title: "Payment Failed",
-        description: error.response?.data?.detail || "Failed to initiate payment",
+        title: "Error",
+        description: error.response?.data?.detail || "Failed to initialize payment",
         variant: "destructive"
       });
-      setPaying(null);
+      setProcessingPayment(null);
     }
-  };
-
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0
-    }).format(amount);
-  };
-
-  const formatDate = (dateStr) => {
-    if (!dateStr) return 'N/A';
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
   };
 
   const getStatusBadge = (status) => {
-    const config = {
-      paid: { color: '#18B057', bg: '#E8F5EE', icon: CheckCircle, label: 'Paid' },
-      pending: { color: '#F59E0B', bg: '#FFF7ED', icon: Clock, label: 'Pending' },
-      failed: { color: '#EF4444', bg: '#FEE2E2', icon: AlertCircle, label: 'Failed' },
-      refunded: { color: '#6B7280', bg: '#F3F4F6', icon: AlertCircle, label: 'Refunded' }
+    const statusConfig = {
+      pending: { color: 'bg-yellow-100 text-yellow-700', icon: Clock },
+      paid: { color: 'bg-green-100 text-green-700', icon: CheckCircle },
+      failed: { color: 'bg-red-100 text-red-700', icon: XCircle },
+      refunded: { color: 'bg-blue-100 text-blue-700', icon: CreditCard }
     };
 
-    const statusConfig = config[status] || config.pending;
-    const Icon = statusConfig.icon;
+    const config = statusConfig[status] || statusConfig.pending;
+    const Icon = config.icon;
 
     return (
-      <div style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 4,
-        padding: '4px 10px',
-        borderRadius: 12,
-        background: statusConfig.bg,
-        color: statusConfig.color,
-        fontSize: 12,
-        fontWeight: 600
-      }}>
+      <Badge className={`${config.color} flex items-center gap-1`}>
         <Icon size={12} />
-        {statusConfig.label}
-      </div>
+        {status.toUpperCase()}
+      </Badge>
     );
   };
 
-  const calculateStats = () => {
-    const totalPaid = paymentRequests
-      .filter(p => p.status === 'paid')
-      .reduce((sum, p) => sum + p.amount, 0);
-    
-    const totalPending = paymentRequests
-      .filter(p => p.status === 'pending')
-      .reduce((sum, p) => sum + p.amount, 0);
-
-    return { totalPaid, totalPending };
-  };
-
-  const stats = calculateStats();
-
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      <div className="p-6 flex justify-center items-center" data-testid="payments-page">
+        <Loader2 className="animate-spin text-violet-600" size={40} />
       </div>
     );
   }
 
   return (
-    <div className="client-dashboard">
-      <ClientSidebar 
-        isOpen={sidebarOpen} 
-        onClose={() => setSidebarOpen(false)} 
-        userName={user?.full_name}
-      />
-
-      <div className="client-main">
-        <ClientHeader 
-          onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-          userName={user?.full_name}
-        />
-
-        <div className="client-content" style={{ padding: '24px 28px' }}>
-          {/* Page Header */}
-          <div style={{ marginBottom: 24 }}>
-            <h1 style={{ fontSize: 28, fontWeight: 700, color: '#1A0A3E', margin: 0, marginBottom: 4 }}>
-              Payments
-            </h1>
-            <p style={{ fontSize: 14, color: '#888', margin: 0 }}>
-              Manage your case payments and invoices
-            </p>
-          </div>
-
-          {/* Stats Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
-            <Card>
-              <CardContent style={{ padding: 20 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <div style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 12,
-                    background: 'linear-gradient(135deg, #18B057 0%, #0E8042 100%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    <CheckCircle size={24} color="#fff" />
-                  </div>
-                  <div>
-                    <p style={{ fontSize: 13, color: '#888', margin: '0 0 4px' }}>Total Paid</p>
-                    <h3 style={{ fontSize: 24, fontWeight: 700, color: '#1A0A3E', margin: 0 }}>
-                      {formatCurrency(stats.totalPaid)}
-                    </h3>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent style={{ padding: 20 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <div style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 12,
-                    background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    <Clock size={24} color="#fff" />
-                  </div>
-                  <div>
-                    <p style={{ fontSize: 13, color: '#888', margin: '0 0 4px' }}>Pending</p>
-                    <h3 style={{ fontSize: 24, fontWeight: 700, color: '#1A0A3E', margin: 0 }}>
-                      {formatCurrency(stats.totalPending)}
-                    </h3>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent style={{ padding: 20 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <div style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 12,
-                    background: 'linear-gradient(135deg, #724AE3 0%, #5835B0 100%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    <FileText size={24} color="#fff" />
-                  </div>
-                  <div>
-                    <p style={{ fontSize: 13, color: '#888', margin: '0 0 4px' }}>Total Requests</p>
-                    <h3 style={{ fontSize: 24, fontWeight: 700, color: '#1A0A3E', margin: 0 }}>
-                      {paymentRequests.length}
-                    </h3>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Payment Requests List */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Payment Requests</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {paymentRequests.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: 60 }}>
-                  <DollarSign size={64} color="#DDD" style={{ margin: '0 auto 16px' }} />
-                  <h3 style={{ fontSize: 18, fontWeight: 600, color: '#1A0A3E', marginBottom: 8 }}>
-                    No Payment Requests
-                  </h3>
-                  <p style={{ color: '#888', fontSize: 14 }}>
-                    Payment requests from your advocate will appear here
-                  </p>
-                </div>
-              ) : (
-                <div style={{ display: 'grid', gap: 12 }}>
-                  {paymentRequests.map((request) => (
-                    <div
-                      key={request.id}
-                      style={{
-                        padding: 16,
-                        background: '#FAFAFE',
-                        borderRadius: 12,
-                        border: '1px solid #F0F0F0',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 16
-                      }}
-                    >
-                      <div style={{
-                        width: 50,
-                        height: 50,
-                        borderRadius: 10,
-                        background: request.status === 'paid' ? '#E8F5EE' : '#FFF7ED',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexShrink: 0
-                      }}>
-                        <DollarSign size={24} color={request.status === 'paid' ? '#18B057' : '#F59E0B'} />
-                      </div>
-
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                          <h4 style={{ fontSize: 14, fontWeight: 600, color: '#1A0A3E', margin: 0 }}>
-                            {request.case?.title || 'Case Payment'}
-                          </h4>
-                          {getStatusBadge(request.status)}
-                        </div>
-                        <p style={{ fontSize: 13, color: '#666', margin: '4px 0' }}>
-                          {request.description}
-                        </p>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, fontSize: 12, color: '#888', marginTop: 4 }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <Calendar size={12} />
-                            {request.due_date ? `Due: ${formatDate(request.due_date)}` : `Created: ${formatDate(request.created_at)}`}
-                          </span>
-                          {request.advocate?.user && (
-                            <span>Advocate: {request.advocate.user.full_name}</span>
-                          )}
-                        </div>
-                      </div>
-
-                      <div style={{ textAlign: 'right', marginRight: 16 }}>
-                        <div style={{ fontSize: 20, fontWeight: 700, color: '#1A0A3E' }}>
-                          {formatCurrency(request.amount)}
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                        {request.status === 'pending' && (
-                          <Button
-                            onClick={() => handlePayment(request)}
-                            disabled={paying === request.id}
-                            style={{ minWidth: 100 }}
-                          >
-                            {paying === request.id ? (
-                              <>
-                                <Loader2 size={14} className="animate-spin" style={{ marginRight: 6 }} />
-                                Processing...
-                              </>
-                            ) : (
-                              <>
-                                <CreditCard size={14} style={{ marginRight: 6 }} />
-                                Pay Now
-                              </>
-                            )}
-                          </Button>
-                        )}
-                        {request.status === 'paid' && (
-                          <Button variant="outline" size="sm">
-                            <Download size={14} style={{ marginRight: 6 }} />
-                            Receipt
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+    <div className="p-6 space-y-6" data-testid="payments-page">
+      <div>
+        <h1 className="text-3xl font-bold text-slate-900">Payment Requests</h1>
+        <p className="text-slate-600 mt-1">Manage your payment requests from advocates</p>
       </div>
+
+      {payments.length === 0 ? (
+        <Card className="p-12 text-center">
+          <CreditCard className="mx-auto text-slate-300 mb-4" size={64} />
+          <h3 className="text-xl font-semibold text-slate-700 mb-2">No Payment Requests</h3>
+          <p className="text-slate-500">You don't have any payment requests at the moment</p>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {payments.map((payment) => (
+            <Card key={payment.id} className="p-6" data-testid={`payment-card-${payment.id}`}>
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-2">
+                    <h3 className="text-lg font-semibold text-slate-900">
+                      ₹{payment.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </h3>
+                    {getStatusBadge(payment.status)}
+                  </div>
+
+                  <p className="text-slate-700 mb-3">{payment.description}</p>
+
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                    <div className="flex items-center gap-2 text-slate-600">
+                      <FileText size={16} className="text-violet-600" />
+                      <span>Case: {payment.case?.title || 'N/A'}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-600">
+                      <Calendar size={16} className="text-violet-600" />
+                      <span>
+                        {new Date(payment.created_at).toLocaleDateString('en-IN', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric'
+                        })}
+                      </span>
+                    </div>
+                    {payment.due_date && (
+                      <div className="flex items-center gap-2 text-slate-600">
+                        <Clock size={16} className="text-violet-600" />
+                        <span>
+                          Due: {new Date(payment.due_date).toLocaleDateString('en-IN', {
+                            day: 'numeric',
+                            month: 'short'
+                          })}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="ml-4">
+                  {payment.status === 'pending' && (
+                    <Button
+                      onClick={() => handlePay(payment)}
+                      disabled={processingPayment === payment.id}
+                      className="bg-violet-600 hover:bg-violet-700"
+                      data-testid={`pay-button-${payment.id}`}
+                    >
+                      {processingPayment === payment.id ? (
+                        <>
+                          <Loader2 className="animate-spin mr-2" size={16} />
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <CreditCard size={16} className="mr-2" />
+                          Pay Now
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

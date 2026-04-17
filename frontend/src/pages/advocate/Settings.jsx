@@ -38,7 +38,7 @@ const Settings = () => {
     email: '',
     phone: '',
     bar_council_id: '',
-    specialization: [],
+    specializations: [],
     experience_years: 0,
     location: '',
     bio: '',
@@ -73,7 +73,7 @@ const Settings = () => {
           email: user.email || '',
           phone: user.phone || '',
           bar_council_id: myProfile.bar_council_id || '',
-          specialization: myProfile.specialization || [],
+          specializations: myProfile.specializations || [],
           experience_years: myProfile.experience_years || 0,
           location: myProfile.location || '',
           bio: myProfile.bio || '',
@@ -181,7 +181,7 @@ const Settings = () => {
       if (profile?.id) {
         const updateData = {
           bar_council_id: formData.bar_council_id,
-          specialization: formData.specialization,
+          specializations: formData.specializations,
           experience_years: parseInt(formData.experience_years),
           location: formData.location,
           bio: formData.bio
@@ -227,15 +227,15 @@ const Settings = () => {
   };
 
   const handleSpecializationToggle = (spec) => {
-    if (formData.specialization.includes(spec)) {
+    if (formData.specializations.includes(spec)) {
       setFormData({
         ...formData,
-        specialization: formData.specialization.filter(s => s !== spec)
+        specializations: formData.specializations.filter(s => s !== spec)
       });
     } else {
       setFormData({
         ...formData,
-        specialization: [...formData.specialization, spec]
+        specializations: [...formData.specializations, spec]
       });
     }
   };
@@ -436,16 +436,16 @@ const Settings = () => {
                           style={{
                             padding: '8px 16px',
                             borderRadius: 20,
-                            border: formData.specialization.includes(spec) ? '2px solid #724AE3' : '1px solid #E0E0E0',
-                            background: formData.specialization.includes(spec) ? '#F5F3FF' : '#fff',
-                            color: formData.specialization.includes(spec) ? '#724AE3' : '#666',
+                            border: formData.specializations.includes(spec) ? '2px solid #724AE3' : '1px solid #E0E0E0',
+                            background: formData.specializations.includes(spec) ? '#F5F3FF' : '#fff',
+                            color: formData.specializations.includes(spec) ? '#724AE3' : '#666',
                             fontSize: 14,
                             fontWeight: 500,
                             cursor: 'pointer',
                             transition: 'all 0.2s'
                           }}
                         >
-                          {formData.specialization.includes(spec) && <Check size={14} style={{ marginRight: 4, display: 'inline' }} />}
+                          {formData.specializations.includes(spec) && <Check size={14} style={{ marginRight: 4, display: 'inline' }} />}
                           {spec}
                         </button>
                       ))}

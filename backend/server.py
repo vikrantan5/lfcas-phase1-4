@@ -297,7 +297,7 @@ async def create_advocate_profile(
     profile = {
         "user_id": current_user["user_id"],
         "bar_council_id": profile_data.bar_council_id,
-        "specializations": [s.value for s in profile_data.specialization],
+        "specializations": [s.value for s in profile_data.specializations],
         "experience_years": profile_data.experience_years,
         "location": profile_data.location,
         "bio": profile_data.bio,

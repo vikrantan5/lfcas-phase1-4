@@ -152,7 +152,7 @@ class AdvocateProfile(BaseModel):
 
 class AdvocateCreate(BaseModel):
     bar_council_id: str
-    specialization: List[CaseType]
+    specializations: List[CaseType]
     experience_years: int
     location: str
     bio: Optional[str] = None

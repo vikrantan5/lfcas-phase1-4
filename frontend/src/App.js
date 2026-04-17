@@ -52,6 +52,30 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   return children;
 };
 
+
+
+
+// Client Route with Onboarding Check
+const ClientRouteWithOnboarding = ({ children }) => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  // If client hasn't completed onboarding, redirect to AI onboarding
+  if (user && user.role === 'client' && !user.has_completed_onboarding) {
+    return <Navigate to="/client/ai-onboarding" replace />;
+  }
+
+  return children;
+};
+
+
 // Home redirect based on authentication
 const Home = () => {
   const { user, loading } = useAuth();
@@ -67,6 +91,10 @@ const Home = () => {
   // If user is logged in, redirect to their dashboard
   if (user) {
     if (user.role === 'client') {
+       // Check if client has completed onboarding
+      if (!user.has_completed_onboarding) {
+        return <Navigate to="/client/ai-onboarding" replace />;
+      }
       return <Navigate to="/client/dashboard" replace />;
     } else if (user.role === 'advocate') {
       return <Navigate to="/advocate/dashboard" replace />;

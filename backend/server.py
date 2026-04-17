@@ -2,7 +2,7 @@
 # Phase 5-9 Refactored - Correct Workflow Implementation
 # Flow: AI Query → Advocate Recommendation → Meeting Request → Meeting → Case Creation
 
-from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query
 from fastapi.responses import JSONResponse
 from starlette.middleware.cors import CORSMiddleware
 import socketio
@@ -154,6 +154,25 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user)):
     if not user.data or len(user.data) == 0:
         raise HTTPException(status_code=404, detail="User not found")
     return UserResponse(**user.data[0])
+
+
+@api_router.patch("/users/onboarding-status")
+async def update_onboarding_status(
+    completed: bool = Query(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Update user's onboarding completion status"""
+    try:
+        result = supabase.table('users').update({
+            'has_completed_onboarding': completed
+        }).eq('id', current_user["user_id"]).execute()
+        
+        if not result.data or len(result.data) == 0:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        return {"message": "Onboarding status updated successfully", "has_completed_onboarding": completed}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update onboarding status: {str(e)}")
 
 
 

@@ -126,6 +126,7 @@ class UserResponse(BaseModel):
     phone: Optional[str] = None
     role: str
     is_active: bool = True
+    has_completed_onboarding: bool = False
     created_at: Optional[datetime] = None
 
 

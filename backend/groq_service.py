@@ -5,9 +5,14 @@ import json
 from typing import Dict, List
 from models import CaseType, AIQueryResponse, GroqAILog
 from datetime import datetime
+import logging
 
 from dotenv import load_dotenv
 from pathlib import Path
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 ROOT_DIR = Path(__file__).parent
@@ -28,6 +33,231 @@ def get_groq_client():
             max_retries=2
         )
     return _groq_client
+
+
+# LEGAL INTENT DETECTION PROMPT
+LEGAL_INTENT_DETECTION_PROMPT = """You are an advanced AI Legal Intelligence Engine.
+
+Your job is to deeply analyze a user's full conversation transcript and determine whether it is a real legal problem.
+
+IMPORTANT RULES:
+
+1. DO NOT rely on keyword matching.
+2. Understand the full context like a human lawyer.
+3. Even if legal keywords like "divorce", "case", "court" are missing, still detect intent from meaning.
+4. The user may describe problems in informal, emotional, or indirect language.
+5. You must detect intent from the situation, not words.
+
+---
+
+🎯 TASKS:
+
+Analyze the conversation and return:
+
+1. Is this a legal problem? (true/false)
+2. If YES → classify case type
+3. Extract structured details
+4. If NOT → ignore or reject
+
+---
+
+📚 SUPPORTED CASE TYPES (NOT LIMITED):
+
+- Divorce / Separation
+- Alimony / Maintenance
+- Child Custody
+- Domestic Violence
+- Dowry Harassment
+- Property / Land Dispute
+- Inheritance / Will
+- Tenant / Rent Issues
+- Fraud / Cheating
+- Employment Issues
+- Consumer Complaints
+- Criminal Cases
+- Cyber Crime
+- Any other legal matter
+
+---
+
+🧠 INTELLIGENCE BEHAVIOR:
+
+- If user says:
+  "My husband left me and not giving money"
+  → This IS alimony/maintenance case
+
+- If user says:
+  "My brother took my father's land"
+  → This IS property dispute
+
+- If user says:
+  "He beats me daily"
+  → This IS domestic violence
+
+- Even WITHOUT keywords → detect intent
+
+---
+
+🚫 NON-LEGAL CASES:
+
+Mark as false ONLY IF:
+- Random text (hello, test, abc)
+- Jokes
+- Completely unrelated topics (movies, coding, games)
+
+---
+
+⚠️ VERY IMPORTANT:
+
+If the conversation clearly describes a real-life dispute/problem between people → it is LEGAL.
+
+---
+
+📤 OUTPUT FORMAT (STRICT JSON):
+
+{{
+  "is_legal": true/false,
+  "case_type": "string",
+  "confidence": 0-1,
+  "summary": "short human-readable summary",
+  "legal_domain": "family/civil/criminal/consumer/etc",
+  "suggested_sections": ["optional IPC/CrPC sections if possible"],
+  "reason_if_rejected": "only if is_legal = false"
+}}
+
+---
+
+🎯 EXAMPLES:
+
+Input:
+"My wife left home 2 years ago and now she is asking money"
+
+Output:
+{{
+  "is_legal": true,
+  "case_type": "alimony",
+  "confidence": 0.92,
+  "summary": "Wife left and is demanding financial support",
+  "legal_domain": "family"
+}}
+
+---
+
+Input:
+"My neighbour captured my land"
+
+Output:
+{{
+  "is_legal": true,
+  "case_type": "property_dispute",
+  "confidence": 0.95,
+  "summary": "Neighbour illegally कब्जा on land",
+  "legal_domain": "civil"
+}}
+
+---
+
+Input:
+"hello bro what are you doing"
+
+Output:
+{{
+  "is_legal": false,
+  "reason_if_rejected": "Not a legal issue"
+}}
+
+---
+
+Now analyze the following conversation:
+
+USER TRANSCRIPT:
+{conversation_text}
+"""
+
+
+async def detect_legal_intent(conversation_text: str) -> Dict:
+    """
+    Use Groq AI to detect if a conversation is about a legal issue.
+    This replaces keyword-based validation with intelligent context understanding.
+    """
+    try:
+        groq_client = get_groq_client()
+        
+        # Format the prompt
+        prompt = LEGAL_INTENT_DETECTION_PROMPT.format(conversation_text=conversation_text)
+        
+        # Call Groq API
+        chat_completion = groq_client.chat.completions.create(
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are an expert legal AI that determines if a conversation is about a legal issue. Always respond with valid JSON."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            model="llama-3.3-70b-versatile",
+            temperature=0.2,
+            max_tokens=500
+        )
+        
+        # Extract response
+        response_content = chat_completion.choices[0].message.content
+        
+        # Parse JSON response
+        try:
+            # Clean markdown if present
+            cleaned_content = response_content.strip()
+            if "```json" in cleaned_content:
+                json_start = cleaned_content.find("```json") + 7
+                json_end = cleaned_content.find("```", json_start)
+                cleaned_content = cleaned_content[json_start:json_end].strip()
+            elif "```" in cleaned_content:
+                json_start = cleaned_content.find("```") + 3
+                json_end = cleaned_content.find("```", json_start)
+                cleaned_content = cleaned_content[json_start:json_end].strip()
+            
+            intent_result = json.loads(cleaned_content)
+            
+            logger.info(f"Legal intent detection: is_legal={intent_result.get('is_legal')}, case_type={intent_result.get('case_type')}")
+            
+            return {
+                "success": True,
+                "is_legal": intent_result.get("is_legal", False),
+                "case_type": intent_result.get("case_type"),
+                "confidence": intent_result.get("confidence", 0.5),
+                "summary": intent_result.get("summary", ""),
+                "legal_domain": intent_result.get("legal_domain"),
+                "reason_if_rejected": intent_result.get("reason_if_rejected"),
+                "tokens_used": chat_completion.usage.total_tokens if hasattr(chat_completion, 'usage') else None
+            }
+            
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.error(f"Failed to parse legal intent response: {e}")
+            logger.error(f"Raw response: {response_content}")
+            
+            # Fallback: if we can't parse, assume it's legal to avoid rejecting valid cases
+            return {
+                "success": True,
+                "is_legal": True,
+                "case_type": "other",
+                "confidence": 0.5,
+                "summary": "Unable to parse AI response, allowing for further analysis",
+                "reason_if_rejected": None
+            }
+    
+    except Exception as e:
+        logger.error(f"Legal intent detection failed: {str(e)}")
+        # Fallback: assume legal to avoid false rejections
+        return {
+            "success": False,
+            "is_legal": True,
+            "error": str(e),
+            "case_type": "other",
+            "confidence": 0.5
+        }
 
 # Enhanced prompt templates with comprehensive legal analysis
 CASE_PROMPTS = {

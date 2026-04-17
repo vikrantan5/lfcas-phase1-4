@@ -42,8 +42,7 @@ from auth import (
     get_current_user, require_role, create_user_with_auth, 
     login_user, get_supabase_client
 )
-from groq_service import analyze_case_with_groq, get_advocate_recommendation_criteria
-
+from groq_service import analyze_case_with_groq, get_advocate_recommendation_criteria, detect_legal_intent
 # Additional models for API requests
 class StatusUpdate(BaseModel):
     new_status: AdvocateStatus
@@ -2541,52 +2540,83 @@ async def get_next_question(
         from groq import Groq
         groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
         
-        # Enhanced system prompt with structured conversation flow
+        # Enhanced system prompt for REAL-TIME CONVERSATIONAL BEHAVIOR
         lang_instructions = {
             "english": "Respond ONLY in English",
             "hindi": "केवल हिंदी में जवाब दें। कोई अंग्रेजी शब्द न इस्तेमाल करें।",
             "bengali": "শুধুমাত্র বাংলায় উত্তর দিন"
         }
         
-        system_prompt = f"""You are an empathetic AI legal assistant specializing in Indian family law. 
+        system_prompt = f"""You are a real-time conversational AI assistant specializing in Indian family law.
+
 IMPORTANT: {lang_instructions.get(language, 'Respond in English')}
 
-Your task is to conduct a thorough legal consultation by asking ONE specific follow-up question at a time.
+---
 
-CONVERSATION STAGES (ask in this order):
-1. First Response: Acknowledge their problem and ask about the SPECIFIC TYPE of case (divorce/तलाक, child custody/बच्चे की हिरासत, alimony/गुजारा भत्ता, dowry harassment/दहेज उत्पीड़न, domestic violence/घरेलू हिंसा)
+⚠️ CRITICAL BEHAVIOR RULES:
 
-2. Second Question: Ask about WHEN this problem started and DURATION (कब शुरू हुआ? कितने समय से?)
+1. Treat voice transcript EXACTLY like typed input.
+2. The moment user input is received, you MUST generate a helpful response.
+3. DO NOT wait for additional input.
+4. DO NOT stay silent after receiving input.
+5. DO NOT assume the conversation is incomplete.
+6. Even if the sentence is imperfect or partial, respond intelligently.
 
-3. Third Question: Ask about their LOCATION (city/district) - महत्वपूर्ण: शहर या जिला बताएं
+---
 
-4. Fourth Question: Ask about OTHER PARTY details (spouse/husband/wife name, their behavior) - दूसरे पक्ष के बारे में
+🎤 VOICE INPUT HANDLING:
 
-5. Fifth Question: Ask about EVIDENCE/DOCUMENTS they have (proofs, certificates, complaints) - क्या आपके पास सबूत/दस्तावेज हैं?
+- Voice input may come as a raw transcript.
+- It may contain pauses, incomplete grammar, or errors.
+- You must still understand intent and respond naturally.
 
-6. Sixth Question: Ask about URGENCY and IMMEDIATE CONCERNS - कितनी जरूरी है? क्या तत्काल खतरा है?
+Example:
+User says (voice): "my husband not giving money from last 2 years"
+
+You should respond like:
+"I understand your situation. This appears to be related to maintenance/alimony. Your husband has legal obligation to provide financial support. Let me gather some more details - when did he stop giving money? Are you currently living together or separately? Also, which city are you in so I can help recommend local advocates?"
+
+---
+
+⚡ RESPONSE RULE:
+
+ALWAYS generate a helpful, empathetic response after every user message that:
+1. Acknowledges what they said
+2. Shows you understand the legal issue
+3. Asks 1-2 relevant follow-up questions naturally (not interrogation-style)
+4. Provides immediate helpful context when possible
+
+---
+
+🚫 DO NOT:
+
+- Wait for confirmation
+- Ask "can you repeat?"
+- Stay stuck in listening mode
+- Ignore the input
+- Ask questions in numbered list format
+- Sound robotic or scripted
+
+---
+
+🎯 GOAL:
+
+Make the conversation feel like talking to a real human lawyer who:
+- Listens carefully
+- Responds immediately with empathy
+- Asks relevant follow-up questions naturally
+- Provides helpful context as you go
+
+---
 
 CURRENT USER RESPONSES COUNT: {user_responses}
 
-RULES:
-- Ask ONLY ONE question per response
-- Be empathetic and culturally sensitive
-- Use simple language
-- After 6 user responses, say "READY_TO_ANALYZE" at the end
-- DO NOT skip questions - ask each one systematically
-- DO NOT summarize - only ask the next question
+After about 4-6 meaningful exchanges, when you have enough information (case type, duration, location, basic details), include "READY_TO_ANALYZE" at the very end of your response.
 
-Example flow in Hindi:
-User: "मेरी शादी में बहुत परेशानी है"
-Assistant: "मैं समझ सकता हूं यह मुश्किल समय है। क्या यह तलाक, बच्चे की हिरासत, गुजारा भत्ता, दहेज उत्पीड़न, या घरेलू हिंसा से संबंधित है?"
+---
 
-User: "तलाक चाहिए"  
-Assistant: "समझा। यह समस्या कब शुरू हुई और कितने समय से चल रही है?"
-
-User: "2 साल से"
-Assistant: "ठीक है। आप किस शहर या जिले में रहते हैं? इससे मुझे स्थानीय वकील सुझाने में मदद मिलेगी।"
-
-Now analyze the conversation history and ask the NEXT appropriate question."""
+Now respond naturally to the following user input:
+"""
         
         messages_for_groq = [{"role": "system", "content": system_prompt}] + conversation_history
         
@@ -2600,23 +2630,21 @@ Now analyze the conversation history and ask the NEXT appropriate question."""
         next_question = response.choices[0].message.content
         
         # Check if AI thinks we have enough information
-        ready_to_analyze = "READY_TO_ANALYZE" in next_question or user_responses >= 6
+        ready_to_analyze = "READY_TO_ANALYZE" in next_question or user_responses >= 5
         
         if ready_to_analyze:
             # Remove the READY_TO_ANALYZE marker if present
             next_question = next_question.replace("READY_TO_ANALYZE", "").strip()
             
-            # Add completion message
-            completion_msg = {
-                "english": "Thank you for sharing all the details. I now have enough information to analyze your case thoroughly. Please click 'Finish & Analyze' to see detailed legal insights, applicable sections, and recommended advocates.",
-                "hindi": "सभी विवरण साझा करने के लिए धन्यवाद। अब मेरे पास आपके मामले का गहन विश्लेषण करने के लिए पर्याप्त जानकारी है। विस्तृत कानूनी जानकारी, लागू धाराएं और अनुशंसित वकील देखने के लिए कृपया 'समाप्त करें और विश्लेषण करें' पर क्लिक करें।",
-                "bengali": "সমস্ত বিবরণ শেয়ার করার জন্য ধন্যবাদ। এখন আমার কাছে আপনার মামলার পুঙ্খানুপুঙ্খ বিশ্লেষণ করার জন্য যথেষ্ট তথ্য আছে। বিস্তারিত আইনি অন্তর্দৃষ্টি, প্রযোজ্য ধারা এবং প্রস্তাবিত আইনজীবী দেখতে 'শেষ করুন এবং বিশ্লেষণ করুন' এ ক্লিক করুন।"
-            }.get(language, "")
-            
-            if next_question:
-                next_question += completion_msg
-            else:
-                next_question = completion_msg.strip()
+            # Add natural completion message
+            if not next_question.endswith("'Finish & Analyze'") and not next_question.endswith("विश्लेषण करें"):
+                completion_msg = {
+                    "english": " I now have enough information to provide you with a comprehensive legal analysis. Click 'Finish & Analyze' button below to see detailed insights, applicable laws, and recommended advocates.",
+                    "hindi": " अब मेरे पास आपके मामले का विस्तृत विश्लेषण करने के लिए पर्याप्त जानकारी है। विस्तृत जानकारी, लागू कानून और अनुशंसित वकील देखने के लिए नीचे 'समाप्त करें और विश्लेषण करें' बटन पर क्लिक करें।",
+                    "bengali": " এখন আমার কাছে আপনার মামলার বিস্তারিত বিশ্লেষণ করার জন্য যথেষ্ট তথ্য আছে। বিস্তারিত অন্তর্দৃষ্টি, প্রযোজ্য আইন এবং প্রস্তাবিত আইনজীবী দেখতে নীচে 'শেষ করুন এবং বিশ্লেষণ করুন' বোতামে ক্লিক করুন।"
+                }.get(language, "")
+                
+                next_question = next_question.strip() + completion_msg
         
         return {
             "success": True,
@@ -2654,36 +2682,40 @@ async def process_voice_conversation(
             logger.error(f"Session not found: {request.session_id}")
             raise HTTPException(status_code=404, detail="Session not found")
         
-        # Validate transcript
-        if not request.transcript or len(request.transcript.strip()) < 20:
+        # Validate transcript length
+        if not request.transcript or len(request.transcript.strip()) < 15:
             logger.info(f"Transcript too short or empty")
             raise HTTPException(
                 status_code=400, 
                 detail="Please provide a detailed description of your legal problem. The conversation is too short."
             )
         
-        web_speech_service = get_web_speech_service()
+        # STEP 1: Use Groq AI to detect legal intent (intelligent validation)
+        logger.info("Step 1: Detecting legal intent with Groq AI...")
+        intent_result = await detect_legal_intent(request.transcript)
         
-        # Extract case info from transcript with validation
+        if not intent_result.get("is_legal", False):
+            rejection_reason = intent_result.get("reason_if_rejected", "This doesn't appear to be a legal problem")
+            logger.warning(f"AI detected non-legal conversation: {rejection_reason}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"⚠️ {rejection_reason}. This is a legal advisory system. Please describe your legal issue clearly (divorce, custody, property dispute, etc.)"
+            )
+        
+        logger.info(f"AI confirmed legal intent: case_type={intent_result.get('case_type')}, confidence={intent_result.get('confidence')}")
+        
+        # STEP 2: Extract additional case info for context
+        web_speech_service = get_web_speech_service()
         case_info = web_speech_service.extract_case_info_from_transcript(
             request.transcript,
             request.language
         )
         
-        logger.info(f"Case info extracted: {case_info.get('case_type')}, is_legal: {case_info.get('is_legal')}")
         
-        # Validate if conversation is about legal matters
-        if not case_info.get("is_legal", True):
-            logger.warning(f"Non-legal conversation detected: {case_info.get('validation_reason')}")
-            raise HTTPException(
-                status_code=400,
-                detail=f"⚠️ {case_info.get('validation_reason')} This is a legal advisory system. Please describe your family law issue (divorce, custody, alimony, etc.)"
-            )
-        
-        # Determine case type
-        case_type_str = case_info.get("case_type", "other")
+        # STEP 3: Determine case type (prefer AI detection, fallback to keyword extraction)
+        case_type_str = intent_result.get("case_type") or case_info.get("case_type", "other")
         if not case_type_str or case_type_str == "other":
-            logger.warning("Could not determine specific case type")
+            logger.info("Case type not specifically determined, will use comprehensive analysis")
         
         try:
             case_type = CaseType(case_type_str)
@@ -2692,8 +2724,8 @@ async def process_voice_conversation(
             case_type = CaseType.OTHER
         
         
-        # Analyze with Groq
-        logger.info(f"Calling Groq AI for analysis, case_type: {case_type}")
+        # STEP 4: Analyze with Groq (full detailed analysis)
+        logger.info(f"Step 2: Calling Groq AI for comprehensive analysis, case_type: {case_type}")
         ai_result = await analyze_case_with_groq(
             case_type=case_type,
             description=request.transcript,

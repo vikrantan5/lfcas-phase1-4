@@ -57,10 +57,11 @@ class WebSpeechService:
     
     def validate_legal_conversation(self, transcript: str, language: str = "english") -> Dict:
         """
-        Validate if the conversation is about a legal problem.
+        Basic validation - now mostly for length check.
+        Real legal intent detection is done by Groq AI.
         Returns: {"is_legal": bool, "reason": str}
         """
-        if not transcript or len(transcript.strip()) < 20:
+        if not transcript or len(transcript.strip()) < 15:
             return {
                 "is_legal": False,
                 "reason": "Conversation is too short. Please describe your legal problem in detail."
@@ -68,59 +69,23 @@ class WebSpeechService:
         
         transcript_lower = transcript.lower()
         
-        # Legal keywords in multiple languages - EXPANDED to include ALL legal matters
-        legal_keywords = {
-            "english": [
-                # Family Law
-                "divorce", "custody", "alimony", "maintenance", "marriage", "husband", "wife", "child", "children",
-                "separation", "dowry", "violence", "harassment", "domestic",
-                # Civil Law (Land/Property)
-                "land", "property", "dispute", "ownership", "possession", "boundary", "plot", "acres", "deed",
-                "sale", "purchase", "tenant", "landlord", "rent", "lease", "eviction", "title", "partition",
-                "inheritance", "will", "estate", "registry", "mutation", "encroachment", "easement",
-                # Criminal Law
-                "fraud", "theft", "cheat", "assault", "fir", "police", "complaint", "bail", "arrest",
-                # General Legal
-                "lawyer", "advocate", "court", "legal", "case", "law", "rights", "justice", "suit",
-                "petition", "file", "judgment", "hearing", "restraining", "order", "injunction", "settlement",
-                # Consumer/Employment
-                "consumer", "refund", "compensation", "employee", "employer", "salary", "termination",
-                # Common phrases
-                "legal issue", "legal problem", "legal help", "need lawyer", "court case", "dispute with"
-            ],
-            "hindi": ["तलाक", "गुजारा", "बच्चे", "हिरासत", "वकील", "अदालत", "कानूनी", "मामला", "शादी", 
-                     "हिंसा", "उत्पीड़न", "दहेज", "संपत्ति", "अधिकार", "कानून", "पति", "पत्नी",
-                     "जमीन", "भूमि", "विवाद", "मालिक", "किराया", "किरायेदार", "धोखाधड़ी", "चोरी"],
-            "bengali": ["ডিভোর্স", "ভরণপোষণ", "সন্তান", "হেফাজত", "আইনজীবী", "আদালত", "আইনি", "মামলা", 
-                       "বিবাহ", "সহিংসতা", "হয়রানি", "যৌতুক", "সম্পত্তি", "অধিকার", "আইন", "স্বামী", "স্ত্রী",
-                       "জমি", "ভূমি", "বিরোধ", "মালিক", "ভাড়া", "প্রতারণা", "চুরি"]
-        }
+        # Only reject obvious spam/test messages
+        spam_indicators = ["xyz", "abc123", "test test test", "nothing", "hello hello hello"]
         
-        # Get keywords for the language
-        keywords = legal_keywords.get(language, legal_keywords["english"])
+        # Check if it's CLEARLY spam (entire message is just spam)
+        words = transcript.split()
+        if len(words) < 5:
+            for indicator in spam_indicators:
+                if indicator in transcript_lower and len(transcript_lower) < 20:
+                    return {
+                        "is_legal": False,
+                        "reason": "Please provide a meaningful description of your legal problem. Avoid test messages."
+                    }
         
-        # Check if transcript contains legal keywords
-        legal_keyword_count = sum(1 for keyword in keywords if keyword in transcript_lower)
-        
-        if legal_keyword_count < 2:
-            return {
-                "is_legal": False,
-                "reason": "This doesn't appear to be a legal problem. Please describe your family law issue clearly."
-            }
-        
-        # Check for non-legal/spam content
-        spam_indicators = ["hello", "hi", "test", "testing", "xyz", "abc", "nothing", "joke", "fun", "random", "demo"]
-        spam_count = sum(1 for indicator in spam_indicators if indicator in transcript_lower)
-        
-        if spam_count > legal_keyword_count and len(transcript.split()) < 30:
-            return {
-                "is_legal": False,
-                "reason": "Please provide a meaningful description of your legal problem. Avoid test or random messages."
-            }
-        
+        # Otherwise, assume it's potentially legal and let Groq AI decide
         return {
             "is_legal": True,
-            "reason": "Valid legal conversation"
+            "reason": "Passes basic validation - will be analyzed by AI"
         }
     
     def extract_case_info_from_transcript(self, transcript: str, language: str = "english") -> Dict:

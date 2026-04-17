@@ -45,15 +45,30 @@ const Settings = () => {
     profile_image_url: ''
   });
 
+  // Map labels to backend ENUM values.
+  // Backend ENUM (case_type): divorce | alimony | child_custody | dowry | domestic_violence | property_dispute | other
   const specializationOptions = [
-    'Divorce',
-    'Child Custody',
-    'Adoption',
-    'Domestic Violence',
-    'Property Disputes',
-    'Maintenance',
-    'Other'
+    { label: 'Divorce', value: 'divorce' },
+    { label: 'Child Custody', value: 'child_custody' },
+    { label: 'Alimony / Maintenance', value: 'alimony' },
+    { label: 'Domestic Violence', value: 'domestic_violence' },
+    { label: 'Dowry', value: 'dowry' },
+    { label: 'Property Dispute', value: 'property_dispute' },
+    { label: 'Other', value: 'other' },
   ];
+
+  // Safety normalizer — converts any label into an ENUM-safe value.
+  const normalizeCaseType = (value) => {
+    if (!value) return value;
+    const v = String(value).toLowerCase().trim().replace(/s+/g, '_');
+    // Map known label-style aliases
+    const aliases = {
+      'property_disputes': 'property_dispute',
+      'maintenance': 'alimony',
+      'adoption': 'other',
+    };
+    return aliases[v] || v;
+  };
 
   useEffect(() => {
     loadProfile();
@@ -181,7 +196,8 @@ const Settings = () => {
       if (profile?.id) {
         const updateData = {
           bar_council_id: formData.bar_council_id,
-          specializations: formData.specializations,
+             // Normalize to ENUM-safe values before sending to backend
+             specializations: (formData.specializations || []).map(normalizeCaseType),
           experience_years: parseInt(formData.experience_years),
           location: formData.location,
           bio: formData.bio
@@ -227,15 +243,16 @@ const Settings = () => {
   };
 
   const handleSpecializationToggle = (spec) => {
-    if (formData.specializations.includes(spec)) {
+    const normalized = normalizeCaseType(spec);
+    if (formData.specializations.includes(normalized)) {
       setFormData({
         ...formData,
-        specializations: formData.specializations.filter(s => s !== spec)
+        specializations: formData.specializations.filter(s => s !== normalized)
       });
     } else {
       setFormData({
         ...formData,
-        specializations: [...formData.specializations, spec]
+        specializations: [...formData.specializations, normalized]
       });
     }
   };
@@ -429,26 +446,31 @@ const Settings = () => {
                   <div>
                     <Label>Areas of Specialization</Label>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 8 }}>
-                      {specializationOptions.map((spec) => (
-                        <button
-                          key={spec}
-                          onClick={() => handleSpecializationToggle(spec)}
-                          style={{
-                            padding: '8px 16px',
-                            borderRadius: 20,
-                            border: formData.specializations.includes(spec) ? '2px solid #724AE3' : '1px solid #E0E0E0',
-                            background: formData.specializations.includes(spec) ? '#F5F3FF' : '#fff',
-                            color: formData.specializations.includes(spec) ? '#724AE3' : '#666',
-                            fontSize: 14,
-                            fontWeight: 500,
-                            cursor: 'pointer',
-                            transition: 'all 0.2s'
-                          }}
-                        >
-                          {formData.specializations.includes(spec) && <Check size={14} style={{ marginRight: 4, display: 'inline' }} />}
-                          {spec}
-                        </button>
-                      ))}
+                      {specializationOptions.map((spec) => {
+                        const isActive = formData.specializations.includes(spec.value);
+                        return (
+                          <button
+                            type="button"
+                            key={spec.value}
+                            data-testid={`spec-toggle-${spec.value}`}
+                            onClick={() => handleSpecializationToggle(spec.value)}
+                            style={{
+                              padding: '8px 16px',
+                              borderRadius: 20,
+                              border: isActive ? '2px solid #724AE3' : '1px solid #E0E0E0',
+                              background: isActive ? '#F5F3FF' : '#fff',
+                              color: isActive ? '#724AE3' : '#666',
+                              fontSize: 14,
+                              fontWeight: 500,
+                              cursor: 'pointer',
+                              transition: 'all 0.2s'
+                            }}
+                          >
+                            {isActive && <Check size={14} style={{ marginRight: 4, display: 'inline' }} />}
+                            {spec.label}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 

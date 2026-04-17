@@ -68,16 +68,32 @@ class WebSpeechService:
         
         transcript_lower = transcript.lower()
         
-        # Legal keywords in multiple languages
+        # Legal keywords in multiple languages - EXPANDED to include ALL legal matters
         legal_keywords = {
-            "english": ["divorce", "custody", "alimony", "maintenance", "lawyer", "advocate", "court", "legal", 
-                       "case", "marriage", "violence", "harassment", "dowry", "property", "rights", "law", 
-                       "petition", "file", "judgment", "hearing", "husband", "wife", "child", "children",
-                       "separation", "restraining", "order", "injunction", "bail", "fir", "complaint"],
+            "english": [
+                # Family Law
+                "divorce", "custody", "alimony", "maintenance", "marriage", "husband", "wife", "child", "children",
+                "separation", "dowry", "violence", "harassment", "domestic",
+                # Civil Law (Land/Property)
+                "land", "property", "dispute", "ownership", "possession", "boundary", "plot", "acres", "deed",
+                "sale", "purchase", "tenant", "landlord", "rent", "lease", "eviction", "title", "partition",
+                "inheritance", "will", "estate", "registry", "mutation", "encroachment", "easement",
+                # Criminal Law
+                "fraud", "theft", "cheat", "assault", "fir", "police", "complaint", "bail", "arrest",
+                # General Legal
+                "lawyer", "advocate", "court", "legal", "case", "law", "rights", "justice", "suit",
+                "petition", "file", "judgment", "hearing", "restraining", "order", "injunction", "settlement",
+                # Consumer/Employment
+                "consumer", "refund", "compensation", "employee", "employer", "salary", "termination",
+                # Common phrases
+                "legal issue", "legal problem", "legal help", "need lawyer", "court case", "dispute with"
+            ],
             "hindi": ["तलाक", "गुजारा", "बच्चे", "हिरासत", "वकील", "अदालत", "कानूनी", "मामला", "शादी", 
-                     "हिंसा", "उत्पीड़न", "दहेज", "संपत्ति", "अधिकार", "कानून", "पति", "पत्नी"],
+                     "हिंसा", "उत्पीड़न", "दहेज", "संपत्ति", "अधिकार", "कानून", "पति", "पत्नी",
+                     "जमीन", "भूमि", "विवाद", "मालिक", "किराया", "किरायेदार", "धोखाधड़ी", "चोरी"],
             "bengali": ["ডিভোর্স", "ভরণপোষণ", "সন্তান", "হেফাজত", "আইনজীবী", "আদালত", "আইনি", "মামলা", 
-                       "বিবাহ", "সহিংসতা", "হয়রানি", "যৌতুক", "সম্পত্তি", "অধিকার", "আইন", "স্বামী", "স্ত্রী"]
+                       "বিবাহ", "সহিংসতা", "হয়রানি", "যৌতুক", "সম্পত্তি", "অধিকার", "আইন", "স্বামী", "স্ত্রী",
+                       "জমি", "ভূমি", "বিরোধ", "মালিক", "ভাড়া", "প্রতারণা", "চুরি"]
         }
         
         # Get keywords for the language

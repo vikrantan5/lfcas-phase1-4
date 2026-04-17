@@ -123,7 +123,10 @@ const AIOnboarding = () => {
     }
   };
 
-  const handleFileCase = async () => {
+  const handleFindAdvocates = async () => {
+    // NEW FLOW: Don't create case directly
+    // Instead, guide user to find advocates and request meeting
+    
     if (!analysis || !analysis.data) {
       toast({
         title: "Error",
@@ -133,43 +136,32 @@ const AIOnboarding = () => {
       return;
     }
 
-    setCreatingCase(true);
-
     try {
-      // Create case from AI analysis
-      const caseData = {
-        case_type: analysis.data.case_classification || 'other',
-        title: `${analysis.data.case_classification || 'Legal'} Case - AI Generated`,
-        description: messages.map(m => `${m.sender}: ${m.message}`).join('\n'),
-        location: analysis.data.location || '',
-        ai_analysis: analysis,
-        required_documents: analysis.data.required_documents || [],
-        legal_sections: analysis.data.legal_sections || [],
-        procedural_guidance: analysis.data.procedural_guidance || ''
-      };
-
-      const response = await caseAPI.create(caseData);
-
-      // Update onboarding status to completed
+      // Mark onboarding as completed
       await authAPI.updateOnboardingStatus(true);
       await updateUser();
 
+      // Store analysis in localStorage for advocate selection page
+      localStorage.setItem('pendingCaseAnalysis', JSON.stringify({
+        analysis: analysis,
+        conversationMessages: messages,
+        timestamp: new Date().toISOString()
+      }));
+
       toast({
-        title: "Case Created!",
-        description: "Your case has been created successfully.",
+        title: "Analysis Complete!",
+        description: "Now let's find the right advocate for your case.",
       });
 
-      // Navigate to case detail
-      navigate(`/client/cases/${response.data.id}`);
+      // Navigate to Find Advocates page
+      navigate('/client/find-advocates');
     } catch (error) {
-      console.error('Failed to create case:', error);
+      console.error('Failed to proceed:', error);
       toast({
-        title: "Failed to Create Case",
+        title: "Error",
         description: error.response?.data?.detail || "Please try again.",
         variant: "destructive"
       });
-    } finally {
-      setCreatingCase(false);
     }
   };
 
@@ -655,35 +647,50 @@ const AIOnboarding = () => {
                     </div>
                   )}
 
-                  {/* Action Buttons */}
-                  <div className="flex flex-col sm:flex-row gap-4 pt-6">
-                    <Button
-                      onClick={handleFileCase}
-                      disabled={creatingCase}
-                      className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-lg py-6"
-                      data-testid="file-case-btn"
-                    >
-                      {creatingCase ? (
-                        <>
-                          <Loader2 className="animate-spin mr-2" size={20} />
-                          Creating Case...
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle size={20} className="mr-2" />
-                          File This Case
-                        </>
-                      )}
-                    </Button>
-                    <Button
-                      onClick={handleSkip}
-                      variant="outline"
-                      className="flex-1 text-lg py-6"
-                      disabled={creatingCase}
-                      data-testid="skip-case-btn"
-                    >
-                      Skip for Now
-                    </Button>
+                  {/* Action Buttons - UPDATED FLOW */}
+                  <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl p-6 border-2 border-purple-200">
+                    <div className="flex items-start gap-3 mb-4">
+                      <div className="w-10 h-10 bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <ArrowRight size={20} className="text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="text-xl font-semibold text-gray-900 mb-2">Next Step: Find an Advocate</h3>
+                        <p className="text-gray-600 leading-relaxed">
+                          Based on your legal issue, we'll help you find experienced advocates who specialize in this area. 
+                          You can review their profiles, request a meeting, and discuss your case before proceeding.
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex flex-col sm:flex-row gap-4">
+                      <Button
+                        onClick={handleFindAdvocates}
+                        disabled={creatingCase}
+                        className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-lg py-6"
+                        data-testid="find-advocates-btn"
+                      >
+                        {creatingCase ? (
+                          <>
+                            <Loader2 className="animate-spin mr-2" size={20} />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle size={20} className="mr-2" />
+                            Find Advocates Now
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        onClick={handleSkip}
+                        variant="outline"
+                        className="flex-1 text-lg py-6"
+                        disabled={creatingCase}
+                        data-testid="skip-case-btn"
+                      >
+                        Skip for Now
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ) : (

@@ -354,27 +354,93 @@ Additional Context: {additional_details}
   "warnings_and_cautions": "Document everything. Preserve evidence. Do not delay if safety at risk. Can return to matrimonial home with protection order. Violation of protection order is punishable."
 }}""",
 
-    CaseType.OTHER: """You are a senior family law expert in India.
+     CaseType.OTHER: """You are a senior legal expert in India with expertise across ALL areas of law.
 
 User's Situation: {description}
 Additional Context: {additional_details}
 
-First determine the specific case type from the situation described, then provide comprehensive analysis following the same detailed format as above, including:
-- case_classification
+IMPORTANT INSTRUCTION: Analyze the user's problem and identify the correct legal category:
+
+**Family Law:** divorce, alimony, child custody, dowry, domestic violence, marriage disputes
+**Civil Law:** land disputes, property disputes, ownership conflicts, boundary disputes, rent issues, tenant disputes, sale deed issues, partition suits, easement rights, contracts, torts, defamation, nuisance
+**Criminal Law:** fraud, theft, assault, harassment, cyber crimes, cheating, criminal breach of trust
+**Other:** consumer complaints, employment disputes, service issues, tax matters, etc.
+
+If this is a LAND DISPUTE, PROPERTY DISPUTE, or any CIVIL LAW matter, provide comprehensive analysis like this:
+
+{{
+  "case_classification": "property_dispute" or "land_dispute" or "civil_law",
+  "category": "Civil Law",
+  "case_summary": "Brief 2-3 line summary of the dispute",
+  "legal_sections": [
+    "Transfer of Property Act, 1882 - Sections on sale, mortgage, lease",
+    "Specific Relief Act, 1963 - Section 8 (possession), Section 9 (partition)",
+    "Indian Easements Act, 1882 - Sections on rights of way, water rights",
+    "Civil Procedure Code, 1908 - Order VII (partition suits), Order XXI (execution)",
+    "Registration Act, 1908 - Sections on registration of property documents",
+    "Land Revenue Acts (state-specific)",
+    "Include ALL relevant sections with explanations"
+  ],
+  "applicable_laws": "Detailed: यह मामला संपत्ति विवाद से संबंधित है। Transfer of Property Act 1882 और Specific Relief Act 1963 के तहत... यदि यह भूमि का मामला है तो राज्य के Land Revenue Act के तहत...",
+  "penalties_and_consequences": "This is a CIVIL matter, not criminal. No jail/imprisonment. Court may order: (1) Declaration of ownership (2) Possession to rightful owner (3) Partition of property (4) Compensation/damages (5) Injunction to stop interference. Losing party may have to pay court costs.",
+  "dispute_type": "Identify: ownership dispute, boundary dispute, partition suit, possession dispute, title dispute, adverse possession, fraud in sale, etc.",
+  "required_documents": [
+    "Sale deed / Title deed / Gift deed",
+    "7/12 extract or land revenue records",
+    "Mutation records (Ferfar)",
+    "Property tax receipts",
+    "Survey map and plot measurements",
+    "Previous sale deeds (chain of title for 30 years)",
+    "Possession documents",
+    "Photographs of property and boundaries",
+    "Municipal khata certificate",
+    "Encumbrance certificate",
+    "Identity and address proofs"
+  ],
+  "procedural_guidance": "Step-by-step: 1. Engage a civil lawyer specializing in property law 2. Gather all title documents 3. File civil suit in appropriate civil court 4. Apply for interim injunction if needed 5. Evidence stage - present documents and witnesses 6. Arguments 7. Judgment and decree 8. If needed, execution proceedings for possession. Timeline: 2-10 years depending on complexity.",
+  "recommended_actions": [
+    "Immediately consult a civil/property law advocate",
+    "Gather all property documents and records",
+    "Get property survey done if boundary dispute",
+    "Verify title records from sub-registrar office",
+    "Apply for interim injunction if opponent interfering",
+    "Do NOT take law in own hands - no violence",
+    "Maintain peaceful possession if you have it"
+  ],
+  "estimated_timeline": "Civil property suits: 3-10 years depending on court workload, appeals, and case complexity. Can be longer if appeals to High Court/Supreme Court.",
+  "court_jurisdiction": "Civil Court (Junior/Senior Division) having jurisdiction where the property is located. For high-value cases: District Court.",
+  "mediation_option": "Property disputes are suitable for mediation. Court may refer to mediation. Consider mutual settlement through family/community mediation to save time and money.",
+  "important_notes": [
+    "Property disputes are CIVIL matters, NOT criminal (unless fraud involved)",
+    "Possession is 9/10ths of law - maintain peaceful possession if you have it",
+    "Registered sale deed has strong evidentiary value",
+    "Adverse possession requires 12 years continuous possession",
+    "Do not use force or violence - this can lead to criminal case",
+    "Get proper legal opinion on title before purchase",
+    "Partition suits between co-owners are common and court can order division"
+  ],
+  "typical_case_outcome": "Court examines title documents, hears evidence, and declares rightful owner. May order possession, partition, or compensation. Appeals possible.",
+  "estimated_costs": "Court fees: 1-5% of property value. Advocate fees: Rs 25,000 - Rs 5,00,000+ depending on complexity and duration.",
+  "warnings_and_cautions": "Never use force or violence to claim property - this is illegal. Never forge or tamper with documents. Always verify title before buying property. Keep all original documents safely."
+}}
+
+For any other case type (criminal, consumer, employment, etc.), provide similar comprehensive analysis with:
+- case_classification (specific type)
+- category (Family/Civil/Criminal/Other)
 - case_summary
-- legal_sections (detailed with explanations)
-- applicable_laws (with Hindi/regional language explanation of main law)
-- penalties_and_consequences (specific punishments/orders/jail terms)
+- legal_sections (with act names and section numbers)
+- applicable_laws
+- penalties_and_consequences
 - required_documents
-- procedural_guidance (step-by-step)
+- procedural_guidance
 - recommended_actions
 - estimated_timeline
 - court_jurisdiction
-- important_notes (at least 5-7 points)
+- important_notes
 - estimated_costs
 - warnings_and_cautions
 
-Be as comprehensive as the examples above."""
+CRITICAL: Only reject if the query is clearly NOT a legal problem (e.g., "what's the weather", "tell me a joke", "how to cook"). For unclear cases, ask "Could you provide more details about your legal issue? It may relate to property, family, criminal, or another legal area." DO NOT reject legitimate legal problems."""
 }
 
 async def analyze_case_with_groq(case_type: CaseType, description: str, additional_details: Dict = None) -> Dict:
@@ -401,7 +467,21 @@ async def analyze_case_with_groq(case_type: CaseType, description: str, addition
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a legal expert AI assistant specializing in Indian family law. Always respond with valid JSON format."
+                    "content": """You are a senior legal expert AI assistant specializing in ALL areas of Indian law including:
+- Family Law (divorce, alimony, child custody, dowry, domestic violence)
+- Civil Law (property disputes, land disputes, rent disputes, ownership conflicts, contracts, torts)
+- Criminal Law (fraud, theft, assault, harassment, cyber crimes)
+- Other Legal Matters (consumer complaints, employment disputes, tax issues, etc.)
+
+Your role is to:
+1. Identify the legal category and case type from the user's description
+2. Provide comprehensive legal analysis in valid JSON format
+3. If the case is unclear or seems non-legal (weather, jokes, unrelated topics), politely ask for clarification
+4. NEVER reject a legitimate legal problem - all legal issues are valid
+
+If a user describes a property/land dispute, ownership conflict, rent issue, or any civil matter, you MUST recognize it as a valid legal case and provide appropriate legal guidance.
+
+Always respond with valid JSON format."""
                 },
                 {
                     "role": "user",
@@ -410,7 +490,7 @@ async def analyze_case_with_groq(case_type: CaseType, description: str, addition
             ],
             model="llama-3.3-70b-versatile",
             temperature=0.3,
-            max_tokens=2000
+            max_tokens=2500
         )
         
         # Extract the response

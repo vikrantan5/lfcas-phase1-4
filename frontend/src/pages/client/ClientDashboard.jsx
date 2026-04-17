@@ -23,6 +23,7 @@ import RatingDialog from '../../components/RatingDialog';
 import '../../styles/client-dashboard.css';
 import Documents from './Documents';
 import CaseTracker from './CaseTracker';
+import MyCases from './MyCases';
 import FindAdvocates from './FindAdvocates';
 import MyAdvocate from './MyAdvocate';
 import MeetingRequests from './MeetingRequests';
@@ -377,7 +378,7 @@ const ClientDashboard = () => {
         {/* ===== CONDITIONAL PAGE RENDERING ===== */}
         {activeItem === 'documents' && <Documents />}
         {activeItem === 'case-tracker' && <CaseTracker />}
-        {activeItem === 'my-cases' && <CaseTracker />}
+        {activeItem === 'my-cases' && <MyCases />}
         {activeItem === 'find-advocates' && <FindAdvocates />}
         {activeItem === 'my-advocate' && <MyAdvocate />}
         {activeItem === 'meeting-requests' && <MeetingRequests />}
@@ -487,7 +488,13 @@ const ClientDashboard = () => {
           <div className="grid-timeline" data-testid="case-progress-timeline">
             <div className="section-header">
               <h3 className="section-title">Case Progress Timeline</h3>
-              <button className="section-link" data-testid="timeline-view-details">View Details <ArrowRight size={14} /></button>
+             <button 
+                className="section-link" 
+                onClick={() => setActiveItem('case-tracker')}
+                data-testid="timeline-view-details"
+              >
+                View Details <ArrowRight size={14} />
+              </button>
             </div>
             <div className="timeline-track">
               {mockCaseTimeline.map((step, i) => (
@@ -518,7 +525,13 @@ const ClientDashboard = () => {
           <div className="grid-cases-overview" data-testid="cases-overview">
             <div className="section-header">
               <h3 className="section-title">Your Cases Overview</h3>
-              <button className="section-link" data-testid="cases-see-all">See All <ArrowRight size={14} /></button>
+                <button 
+                className="section-link" 
+                onClick={() => setActiveItem('my-cases')}
+                data-testid="cases-see-all"
+              >
+                See All <ArrowRight size={14} />
+              </button>
             </div>
             {loading ? (
               <div className="loading-center"><Loader2 className="animate-spin" size={32} /></div>
@@ -568,7 +581,13 @@ const ClientDashboard = () => {
           <div className="grid-reminders" data-testid="upcoming-reminders">
             <div className="section-header">
               <h3 className="section-title">Upcoming Reminders</h3>
-              <button className="section-link" data-testid="reminders-view-all">View All <ArrowRight size={14} /></button>
+               <button 
+                className="section-link" 
+                onClick={() => setActiveItem('hearings')}
+                data-testid="reminders-view-all"
+              >
+                View All <ArrowRight size={14} />
+              </button>
             </div>
             <div className="reminders-list">
               {(reminders.length > 0 ? reminders : []).slice(0, 3).map((rem, i) => (
@@ -596,9 +615,9 @@ const ClientDashboard = () => {
             <div className="quick-actions-row">
               {[
                 { label: 'Start New Case', desc: 'Create a new case with AI guidance', icon: FileText, color: 'green', action: () => setShowAIQuery(true) },
-                { label: 'Upload Documents', desc: 'Secure & advocate controlled', icon: Upload, color: 'blue', action: () => {} },
-                { label: 'Find Advocate', desc: 'Get matched with verified experts', icon: Search, color: 'purple', action: () => {} },
-                { label: 'Download Report', desc: 'Get PDF summary of your case', icon: FileDown, color: 'teal', action: () => {} },
+                { label: 'Upload Documents', desc: 'Secure & advocate controlled', icon: Upload, color: 'blue', action: () => setActiveItem('documents') },
+                { label: 'Find Advocate', desc: 'Get matched with verified experts', icon: Search, color: 'purple', action: () => setActiveItem('find-advocates') },
+                { label: 'Download Report', desc: 'Get PDF summary of your case', icon: FileDown, color: 'teal', action: () => setActiveItem('downloads') },
               ].map((item, i) => (
                 <button key={i} className={`quick-action-card ${item.color}`} onClick={item.action} data-testid={`quick-action-${item.label.toLowerCase().replace(/ /g, '-')}`}>
                   <div className={`qa-icon ${item.color}`}><item.icon size={24} /></div>
@@ -613,7 +632,13 @@ const ClientDashboard = () => {
           <div className="grid-advocates" data-testid="recommended-advocates">
             <div className="section-header">
               <h3 className="section-title">Recommended Advocates</h3>
-              <button className="section-link" data-testid="advocates-see-all">See All <ArrowRight size={14} /></button>
+              <button 
+                className="section-link" 
+                onClick={() => setActiveItem('find-advocates')}
+                data-testid="advocates-see-all"
+              >
+                See All <ArrowRight size={14} />
+              </button>
             </div>
             <div className="advocates-list">
               {(dynamicRecommendedAdvocates.length > 0 ? dynamicRecommendedAdvocates : []).slice(0, 3).map((adv, i) => (

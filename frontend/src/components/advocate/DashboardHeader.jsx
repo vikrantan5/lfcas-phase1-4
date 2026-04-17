@@ -58,10 +58,10 @@ const DashboardHeader = ({ onToggleSidebar, userName = 'Rahul Sharma' }) => {
         />
 
         {/* Get Premium */}
-        <button className="btn-premium" data-testid="get-premium-btn">
+        {/* <button className="btn-premium" data-testid="get-premium-btn">
           <Star size={14} fill="#fff" />
           Get Premium
-        </button>
+        </button> */}
       </div>
     </header>
   );

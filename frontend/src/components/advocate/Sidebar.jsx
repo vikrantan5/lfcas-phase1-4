@@ -91,7 +91,7 @@ const Sidebar = ({ isOpen, onClose, userName = 'Rahul Sharma' }) => {
         </nav>
 
         {/* Upgrade Card */}
-        <div className="upgrade-card" data-testid="upgrade-card">
+        {/* <div className="upgrade-card" data-testid="upgrade-card">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <Trophy size={22} style={{ color: '#FFD700' }} />
             <span style={{ color: '#fff', fontSize: 14, fontWeight: 700 }}>
@@ -104,7 +104,7 @@ const Sidebar = ({ isOpen, onClose, userName = 'Rahul Sharma' }) => {
           <button className="btn-gold" data-testid="upgrade-now-btn">
             Upgrade Now <ChevronRight size={14} />
           </button>
-        </div>
+        </div> */}
 
         {/* Bottom Profile */}
         <div style={{ padding: '14px 16px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>

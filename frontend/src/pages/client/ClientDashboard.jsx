@@ -115,10 +115,10 @@ const Sidebar = ({ activeItem, setActiveItem, onStartAI }) => {
       </div>
 
       <div className="sidebar-footer">
-        <button className="premium-btn" data-testid="get-premium-btn">
+        {/* <button className="premium-btn" data-testid="get-premium-btn">
           <Crown size={18} />
           <span>Get Premium</span>
-        </button>
+        </button> */}
       </div>
     </aside>
   );

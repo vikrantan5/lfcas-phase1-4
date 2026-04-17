@@ -31,6 +31,7 @@ import HearingsReminders from './HearingsReminders';
 import Downloads from './Downloads';
 import LegalResources from './LegalResources';
 import SettingsPage from './Settings';
+import { getAvatarUrl, handleAvatarError } from '../../lib/utils';
 // ============ MOCK DATA ============
 const mockCaseTimeline = [
   { stage: 'Petition Filed', status: 'completed', date: '10 Jan 2025', icon: 'check' },
@@ -644,7 +645,20 @@ const ClientDashboard = () => {
               {(dynamicRecommendedAdvocates.length > 0 ? dynamicRecommendedAdvocates : []).slice(0, 3).map((adv, i) => (
                 <div key={i} className="advocate-row" data-testid={`advocate-item-${i}`}>
                   <div className="advocate-avatar">
-                    <div className="avatar-placeholder">{adv.name.charAt(0)}</div>
+                    <img
+                      src={getAvatarUrl(adv, { size: 80 })}
+                      alt={adv.name}
+                      onError={handleAvatarError(adv)}
+                      data-testid={`advocate-avatar-${i}`}
+                      style={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: '50%',
+                        objectFit: 'cover',
+                        border: '2px solid #F0EBF9',
+                        background: '#F5F3FF'
+                      }}
+                    />
                   </div>
                   <div className="advocate-info">
                     <p className="advocate-name">
@@ -802,12 +816,21 @@ const ClientDashboard = () => {
                   <div className="space-y-4">
                     {recommendedAdvocates.map((adv) => (
                       <Card key={adv.id} className="p-6 hover:shadow-lg transition-all">
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <h4 className="font-semibold text-xl text-slate-900 mb-1">{adv.user?.full_name || 'Advocate'}</h4>
-                            <p className="text-sm text-slate-600">{adv.location} &bull; {adv.experience_years} yrs &bull; Rating: {adv.rating}/5.0</p>
+                        <div className="flex justify-between items-start gap-4">
+                          <div className="flex gap-4 flex-1">
+                            <img
+                              src={getAvatarUrl({ profile_image_url: adv.user?.profile_image_url, full_name: adv.user?.full_name }, { size: 80 })}
+                              alt={adv.user?.full_name || 'Advocate'}
+                              onError={handleAvatarError({ full_name: adv.user?.full_name })}
+                              className="w-14 h-14 rounded-full object-cover border-2 border-violet-100"
+                              data-testid={`ai-recommended-avatar-${adv.id}`}
+                            />
+                            <div className="flex-1">
+                              <h4 className="font-semibold text-xl text-slate-900 mb-1">{adv.user?.full_name || 'Advocate'}</h4>
+                              <p className="text-sm text-slate-600">{adv.location} &bull; {adv.experience_years} yrs &bull; Rating: {adv.rating}/5.0</p>
+                            </div>
                           </div>
-                          <Button onClick={() => handleRequestMeeting(adv)} className="bg-gradient-to-r from-violet-600 to-purple-600 ml-4">
+                          <Button onClick={() => handleRequestMeeting(adv)} className="bg-gradient-to-r from-violet-600 to-purple-600">
                             Request Meeting
                           </Button>
                         </div>

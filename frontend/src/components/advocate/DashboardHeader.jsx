@@ -1,8 +1,13 @@
 import React from 'react';
 import { Menu, Search, Bell, MessageSquare, Star } from 'lucide-react';
 import NotificationDropdown from './NotificationDropdown';
+import { useAuth } from '../../contexts/AuthContext';
+import { getAvatarUrl, handleAvatarError } from '../../lib/utils';
 
 const DashboardHeader = ({ onToggleSidebar, userName = 'Rahul Sharma' }) => {
+  const { user } = useAuth();
+  const avatarUrl = getAvatarUrl(user, { size: 40 });
+
   return (
     <header className="adv-header" data-testid="dashboard-header">
       {/* Left */}
@@ -45,10 +50,11 @@ const DashboardHeader = ({ onToggleSidebar, userName = 'Rahul Sharma' }) => {
 
         {/* Avatar */}
         <img
-          src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=40&h=40&fit=crop&crop=face"
+          src={avatarUrl}
           alt="User"
           className="profile-avatar-sm"
           data-testid="header-avatar"
+          onError={handleAvatarError(user)}
         />
 
         {/* Get Premium */}

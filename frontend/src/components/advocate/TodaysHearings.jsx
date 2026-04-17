@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Clock, Info, CheckCircle, ChevronRight, FileText ,Calendar } from 'lucide-react';
 import { advocateDashboardAPI } from '../../services/api';
 import { format } from 'date-fns';
+import { getAvatarUrl, handleAvatarError } from '../../lib/utils';
 
 const TodaysHearings = () => {
   const [hearings, setHearings] = useState([]);
@@ -71,13 +72,14 @@ const TodaysHearings = () => {
           {/* Case + Avatar */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
             <img
-              src={firstHearing.client_avatar || "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=40&h=40&fit=crop&crop=face"}
-              alt="Client"
+              src={getAvatarUrl({ profile_image_url: firstHearing.client_avatar, full_name: firstHearing.client_name }, { size: 40 })}
+              alt={firstHearing.client_name || 'Client'}
               className="profile-avatar-sm"
+              onError={handleAvatarError({ full_name: firstHearing.client_name })}
             />
             <div style={{ flex: 1 }}>
               <p style={{ fontSize: 14, fontWeight: 600, color: '#1A0A3E', margin: 0 }}>
-                {firstHearing.case_name}
+                {firstHearing.case_title || firstHearing.case_name}
               </p>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
                 <Clock size={13} color="#724AE3" />

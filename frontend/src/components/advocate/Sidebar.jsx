@@ -1,5 +1,7 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
+import { getAvatarUrl, handleAvatarError } from '../../lib/utils';
 import {
   Home, Briefcase, Search, Calendar, FileText, DollarSign,
   MessageSquare, Users, Settings, ChevronDown, ChevronRight,
@@ -22,6 +24,8 @@ const navItems = [
 const Sidebar = ({ isOpen, onClose, userName = 'Rahul Sharma' }) => {
   const navigate = useNavigate();
   const location = useLocation();
+    const { user } = useAuth();
+  const avatarUrl = getAvatarUrl(user, { size: 100 });
 
   const isActive = (path) => {
     return location.pathname === path || location.pathname.startsWith(path + '/');
@@ -49,10 +53,11 @@ const Sidebar = ({ isOpen, onClose, userName = 'Rahul Sharma' }) => {
         <div style={{ padding: '20px 16px 14px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <img
-              src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face"
+              src={avatarUrl}
               alt="Profile"
               className="profile-avatar"
               data-testid="sidebar-profile-avatar"
+              onError={handleAvatarError(user)}
             />
             <div>
               <p style={{ color: '#fff', fontSize: 15, fontWeight: 600, margin: 0, lineHeight: 1.3 }}>
@@ -105,9 +110,11 @@ const Sidebar = ({ isOpen, onClose, userName = 'Rahul Sharma' }) => {
         <div style={{ padding: '14px 16px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
             <img
-              src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=60&h=60&fit=crop&crop=face"
+              src={avatarUrl}
               alt="Profile"
               style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }}
+              data-testid="sidebar-profile-avatar-bottom"
+              onError={handleAvatarError(user)}
             />
             <div>
               <p style={{ color: '#fff', fontSize: 13, fontWeight: 600, margin: 0 }}>

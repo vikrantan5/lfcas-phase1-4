@@ -2288,8 +2288,8 @@ async def get_recommended_advocates(
     primary_case_type = case_types[0] if case_types else None
     primary_location = locations[0] if locations else None
     
-    # Get approved advocates
-    query = supabase.table('advocates').select('*, users(full_name, email)').eq('status', 'approved')
+       # Get approved advocates
+    query = supabase.table('advocates').select('*, users(full_name, email, profile_image_url)').eq('status', 'approved')
     
     # Filter by specialization if we know the case type
     if primary_case_type:
@@ -2315,7 +2315,8 @@ async def get_recommended_advocates(
             "verified": advocate.get('status') == 'approved',
             "location": advocate.get('location', ''),
             "bar_council_id": advocate.get('bar_council_id', ''),
-            "bio": advocate.get('bio', '')[:100] + '...' if advocate.get('bio') else ''
+            "bio": advocate.get('bio', '')[:100] + '...' if advocate.get('bio') else '',
+            "profile_image_url": user_data.get('profile_image_url')
         })
     
     return {"advocates": recommended_advocates}
@@ -2501,12 +2502,14 @@ async def get_advocate_today_hearings(
         for hearing in hearings_result.data:
             case_data = cases_map.get(hearing['case_id'], {})
             
-            # Get client name
+            # Get client name and avatar
             client_name = "Client"
+            client_avatar = None
             if case_data.get('client_id'):
-                client_result = supabase.table('users').select('full_name').eq('id', case_data['client_id']).execute()
+                client_result = supabase.table('users').select('full_name, profile_image_url').eq('id', case_data['client_id']).execute()
                 if client_result.data:
                     client_name = client_result.data[0]['full_name']
+                    client_avatar = client_result.data[0].get('profile_image_url')
             
             # Get documents for this case
             documents_result = supabase.table('documents').select('id', count='exact').eq('case_id', hearing['case_id']).execute()
@@ -2517,6 +2520,7 @@ async def get_advocate_today_hearings(
                 "case_id": hearing['case_id'],
                 "case_title": case_data.get('title', 'Case'),
                 "client_name": client_name,
+                "client_avatar": client_avatar,
                 "hearing_date": hearing['hearing_date'],
                 "court_name": hearing.get('court_name', ''),
                 "court_room": hearing.get('court_room', ''),

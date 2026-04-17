@@ -128,6 +128,7 @@ class UserResponse(BaseModel):
     role: str
     is_active: bool = True
     has_completed_onboarding: bool = False
+    profile_image_url: Optional[str] = None
     created_at: Optional[datetime] = None
 
 

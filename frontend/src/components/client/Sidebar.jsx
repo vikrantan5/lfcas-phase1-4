@@ -1,5 +1,7 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
+import { getAvatarUrl, handleAvatarError } from '../../lib/utils';
 import { 
   Home, Briefcase, FileText, Calendar, Search, UserCheck, 
   MessageSquare, Download, BookOpen, Settings, DollarSign, X
@@ -9,6 +11,9 @@ import '../../styles/client-dashboard.css';
 const Sidebar = ({ isOpen, onClose, userName }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
+  const displayName = userName || user?.full_name || 'User';
+  const avatarUrl = getAvatarUrl(user || { full_name: displayName }, { size: 80, background: '60A5FA', color: 'fff' });
 
   const sidebarSections = [
     {
@@ -177,23 +182,23 @@ const Sidebar = ({ isOpen, onClose, userName }) => {
           background: 'rgba(0,0,0,0.2)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{
-              width: 40,
-              height: 40,
-              borderRadius: '50%',
-              background: '#60A5FA',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#fff',
-              fontWeight: 600,
-              fontSize: 16
-            }}>
-              {userName?.charAt(0) || 'U'}
-            </div>
+            <img
+              src={avatarUrl}
+              alt={displayName}
+              data-testid="client-sidebar-avatar"
+              onError={handleAvatarError({ full_name: displayName })}
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: '50%',
+                objectFit: 'cover',
+                border: '2px solid rgba(255,255,255,0.2)',
+                background: '#60A5FA'
+              }}
+            />
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{ fontSize: 13, fontWeight: 600, color: '#fff', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {userName || 'User'}
+                {displayName}
               </p>
               <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', margin: 0 }}>
                 Client

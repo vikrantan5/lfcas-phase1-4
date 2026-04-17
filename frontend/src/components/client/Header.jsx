@@ -1,7 +1,13 @@
 import React from 'react';
 import { Menu, Bell, Search } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { getAvatarUrl, handleAvatarError } from '../../lib/utils';
 
 const Header = ({ onToggleSidebar, userName }) => {
+  const { user } = useAuth();
+  const displayName = userName || user?.full_name || 'User';
+  const avatarUrl = getAvatarUrl(user || { full_name: displayName }, { size: 72, background: '3B82F6', color: 'fff' });
+
   return (
     <header style={{
       background: '#fff',
@@ -84,24 +90,23 @@ const Header = ({ onToggleSidebar, userName }) => {
           }} />
         </button>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{
-            width: 36,
-            height: 36,
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#fff',
-            fontWeight: 600,
-            fontSize: 14
-          }}>
-            {userName?.charAt(0) || 'U'}
-          </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <img
+            src={avatarUrl}
+            alt={displayName}
+            data-testid="client-header-avatar"
+            onError={handleAvatarError({ full_name: displayName })}
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: '50%',
+              objectFit: 'cover',
+              background: 'linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%)'
+            }}
+          />
           <div>
             <p style={{ fontSize: 14, fontWeight: 600, color: '#111827', margin: 0 }}>
-              {userName || 'User'}
+              {displayName}
             </p>
             <p style={{ fontSize: 12, color: '#6B7280', margin: 0 }}>
               Client

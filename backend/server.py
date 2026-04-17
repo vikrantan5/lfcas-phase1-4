@@ -33,7 +33,11 @@ from models import (
     CaseStageHistory, CaseStageHistoryCreate,
     # Payment models
     PaymentRequest, PaymentRequestCreate, PaymentRequestResponse, PaymentStatus,
-    PaymentVerification, AdvocatePaymentSettings, AdvocatePaymentSettingsUpdate
+    PaymentVerification, AdvocatePaymentSettings, AdvocatePaymentSettingsUpdate,
+    # Document edit permission models
+    DocumentEditRequest, DocumentEditRequestCreate, DocumentEditRequestResponse,
+    DocumentEditRequestUpdate, DocumentEditStatus, DocumentVersion, DocumentVersionCreate,
+    DocumentWithEditPermission
 )
 from pydantic import BaseModel
 

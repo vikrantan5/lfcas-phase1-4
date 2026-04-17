@@ -113,6 +113,19 @@ export const documentAPI = {
     headers: { 'Content-Type': 'multipart/form-data' },
   }),
   getByCaseId: (caseId) => api.get(`/documents/case/${caseId}`),
+
+    // Document Edit Permission APIs
+  createEditRequest: (data) => api.post('/documents/edit-request', data),
+  getClientEditRequests: () => api.get('/documents/edit-requests/client'),
+  getAdvocateEditRequests: (status) => api.get('/documents/edit-requests/advocate', { params: { status } }),
+  updateEditRequest: (requestId, data) => api.patch(`/documents/edit-requests/${requestId}`, data),
+  getEditStatus: (documentId) => api.get(`/documents/${documentId}/edit-status`),
+  
+  // Document Version APIs
+  getVersions: (documentId) => api.get(`/documents/${documentId}/versions`),
+  createVersion: (documentId, formData) => api.post(`/documents/${documentId}/versions`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
 };
 
 // Message APIs

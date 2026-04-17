@@ -571,3 +571,78 @@ class AdvocatePaymentSettings(BaseModel):
 class AdvocatePaymentSettingsUpdate(BaseModel):
     razorpay_key_id: str
     razorpay_key_secret: Optional[str] = None  # Optional for updates
+
+
+
+
+# ============= DOCUMENT EDIT PERMISSION MODELS =============
+class DocumentEditStatus(str, Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class DocumentEditRequestCreate(BaseModel):
+    document_id: str
+    case_id: str
+    advocate_id: str
+    request_reason: Optional[str] = None
+
+
+class DocumentEditRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    document_id: str
+    client_id: str
+    advocate_id: str
+    case_id: str
+    status: DocumentEditStatus = DocumentEditStatus.PENDING
+    request_reason: Optional[str] = None
+    advocate_notes: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    approved_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
+
+
+class DocumentEditRequestResponse(DocumentEditRequest):
+    document_name: Optional[str] = None
+    client_name: Optional[str] = None
+    case_title: Optional[str] = None
+
+
+class DocumentEditRequestUpdate(BaseModel):
+    status: DocumentEditStatus
+    advocate_notes: Optional[str] = None
+    edit_duration_hours: Optional[int] = 24  # How long the document remains editable
+
+
+class DocumentVersion(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    document_id: str
+    version_number: int
+    file_url: str
+    file_name: str
+    file_size: Optional[int] = None
+    edited_by: str
+    edit_summary: Optional[str] = None
+    changes_description: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class DocumentVersionCreate(BaseModel):
+    document_id: str
+    edit_summary: Optional[str] = None
+    changes_description: Optional[str] = None
+
+
+class DocumentWithEditPermission(Document):
+    is_locked: bool = True
+    is_editable: bool = False
+    current_version: int = 1
+    last_edited_at: Optional[datetime] = None
+    has_pending_edit_request: bool = False
+    edit_request_status: Optional[str] = None

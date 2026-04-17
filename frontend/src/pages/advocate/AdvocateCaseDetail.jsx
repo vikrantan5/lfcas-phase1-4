@@ -53,9 +53,7 @@ const AdvocateCaseDetail = () => {
   const [stageNotes, setStageNotes] = useState('');
   const [updatingStage, setUpdatingStage] = useState(false);
 
-
-
-   // Payment Request State
+  // Payment Request State
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [paymentData, setPaymentData] = useState({
     amount: '',
@@ -275,9 +273,7 @@ const AdvocateCaseDetail = () => {
     }
   };
 
-
-
-   const handleRequestPayment = async () => {
+  const handleRequestPayment = async () => {
     if (!paymentData.amount || !paymentData.description) {
       toast({ title: "Error", description: "Please fill all required fields", variant: "destructive" });
       return;
@@ -305,6 +301,7 @@ const AdvocateCaseDetail = () => {
       setRequestingPayment(false);
     }
   };
+
   const getStatusColor = (status) => {
     const colors = {
       initiated: 'bg-blue-100 text-blue-800',
@@ -372,7 +369,7 @@ const AdvocateCaseDetail = () => {
               </div>
             </div>
             <div className="flex items-center space-x-3">
-                  <Button onClick={() => setShowPaymentDialog(true)} variant="default">
+              <Button onClick={() => setShowPaymentDialog(true)} variant="default">
                 <Plus className="w-4 h-4 mr-2" />
                 Request Payment
               </Button>
@@ -920,6 +917,83 @@ const AdvocateCaseDetail = () => {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Payment Request Dialog */}
+      <Dialog open={showPaymentDialog} onOpenChange={setShowPaymentDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Request Payment from Client</DialogTitle>
+            <DialogDescription>
+              Send a payment request to the client for legal services
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            handleRequestPayment();
+          }} className="space-y-4">
+            <div>
+              <Label>Amount (₹)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="Enter amount"
+                value={paymentData.amount}
+                onChange={(e) => setPaymentData({...paymentData, amount: e.target.value})}
+                required
+              />
+            </div>
+
+            <div>
+              <Label>Description</Label>
+              <Textarea
+                placeholder="Describe what this payment is for (e.g., Consultation fee, Court filing fees, etc.)"
+                value={paymentData.description}
+                onChange={(e) => setPaymentData({...paymentData, description: e.target.value})}
+                rows={3}
+                required
+              />
+            </div>
+
+            <div>
+              <Label>Due Date (Optional)</Label>
+              <Input
+                type="date"
+                value={paymentData.due_date}
+                onChange={(e) => setPaymentData({...paymentData, due_date: e.target.value})}
+                min={new Date().toISOString().split('T')[0]}
+              />
+              <p className="text-xs text-gray-500 mt-1">Set a deadline for payment if applicable</p>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <Button 
+                type="button"
+                variant="outline" 
+                onClick={() => {
+                  setShowPaymentDialog(false);
+                  setPaymentData({ amount: '', description: '', due_date: '' });
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={requestingPayment}>
+                {requestingPayment ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Sending Request...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4 mr-2" />
+                    Send Payment Request
+                  </>
+                )}
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

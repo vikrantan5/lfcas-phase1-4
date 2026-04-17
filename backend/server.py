@@ -396,6 +396,40 @@ async def update_advocate_status(
     return {"message": "Status updated successfully"}
 
 
+
+@api_router.patch("/advocates/{advocate_id}")
+async def update_advocate_profile(
+    advocate_id: str,
+    update_data: dict,
+    current_user: dict = Depends(require_role([UserRole.ADVOCATE]))
+):
+    """Update advocate profile"""
+    try:
+        # Verify advocate owns this profile
+        advocate = supabase.table('advocates').select('*').eq('id', advocate_id).execute()
+        
+        if not advocate.data or len(advocate.data) == 0:
+            raise HTTPException(status_code=404, detail="Advocate profile not found")
+        
+        if advocate.data[0]['user_id'] != current_user["user_id"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Update profile
+        result = supabase.table('advocates').update(update_data).eq('id', advocate_id).execute()
+        
+        if not result.data or len(result.data) == 0:
+            raise HTTPException(status_code=500, detail="Failed to update profile")
+        
+        return {"message": "Profile updated successfully", "profile": result.data[0]}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Update advocate profile error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
 # ============= AI QUERY ENDPOINTS (REFACTORED - No Case Creation) =============
 @api_router.post("/ai/analyze")
 async def analyze_legal_query(
@@ -506,16 +540,16 @@ async def create_meeting_request(
 
 @api_router.get("/meeting-requests", response_model=List[MeetingRequestResponse])
 async def list_meeting_requests(
-    status: Optional[MeetingRequestStatus] = None,
+    status: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
     """List meeting requests for the current user"""
     query = supabase.table('meeting_requests').select('*, client:users!meeting_requests_client_id_fkey(*), advocate:advocates!meeting_requests_advocate_id_fkey(*, users(*))')
     
     # Filter based on role
-    if current_user["role"] == UserRole.CLIENT:
+    if current_user["role"] == UserRole.CLIENT or current_user["role"] == 'client':
         query = query.eq('client_id', current_user["user_id"])
-    elif current_user["role"] == UserRole.ADVOCATE:
+    elif current_user["role"] == UserRole.ADVOCATE or current_user["role"] == 'advocate':
         # Get advocate profile first
         adv_profile = supabase.table('advocates').select('id').eq('user_id', current_user["user_id"]).execute()
         if adv_profile.data and len(adv_profile.data) > 0:
@@ -546,7 +580,6 @@ async def list_meeting_requests(
         requests.append(req_response)
     
     return requests
-
 
 @api_router.get("/meeting-requests/{request_id}", response_model=MeetingRequestResponse)
 async def get_meeting_request(
@@ -1241,6 +1274,338 @@ async def get_case_documents(
     result = supabase.table('documents').select('*').eq('case_id', case_id).order('created_at', desc=True).execute()
     
     return [Document(**d) for d in result.data]
+
+
+
+
+
+# ============= DOCUMENT EDIT PERMISSION ENDPOINTS =============
+@api_router.post("/documents/edit-request", response_model=DocumentEditRequestResponse)
+async def create_document_edit_request(
+    request_data: DocumentEditRequestCreate,
+    current_user: dict = Depends(require_role([UserRole.CLIENT]))
+):
+    """Client requests permission to edit a document"""
+    try:
+        # Verify document exists and belongs to client's case
+        document = supabase.table('documents').select('*, cases!inner(*)').eq('id', request_data.document_id).execute()
+        
+        if not document.data or len(document.data) == 0:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        doc = document.data[0]
+        case_data = doc.get('cases')
+        
+        if not case_data or case_data['client_id'] != current_user["user_id"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Check if there's already a pending request
+        existing = supabase.table('document_edit_requests').select('*').eq('document_id', request_data.document_id).eq('status', 'pending').execute()
+        
+        if existing.data and len(existing.data) > 0:
+            raise HTTPException(status_code=400, detail="A pending edit request already exists for this document")
+        
+        # Create edit request
+        edit_request = {
+            "document_id": request_data.document_id,
+            "client_id": current_user["user_id"],
+            "advocate_id": case_data['advocate_id'],
+            "reason": request_data.reason,
+            "status": DocumentEditStatus.PENDING
+        }
+        
+        result = supabase.table('document_edit_requests').insert(edit_request).execute()
+        
+        if not result.data or len(result.data) == 0:
+            raise HTTPException(status_code=500, detail="Failed to create edit request")
+        
+        # Notify advocate
+        if case_data.get('advocate_id'):
+            advocate = supabase.table('advocates').select('user_id').eq('id', case_data['advocate_id']).execute()
+            if advocate.data:
+                notification = {
+                    "user_id": advocate.data[0]['user_id'],
+                    "notification_type": NotificationType.DOCUMENT_UPLOADED,
+                    "title": "Document Edit Request",
+                    "message": f"A client has requested permission to edit a document: {doc['document_name']}",
+                    "related_id": result.data[0]['id']
+                }
+                supabase.table('notifications').insert(notification).execute()
+        
+        return DocumentEditRequestResponse(**result.data[0])
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Create edit request error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create edit request: {str(e)}")
+
+
+@api_router.get("/documents/edit-requests/client", response_model=List[DocumentEditRequestResponse])
+async def get_client_edit_requests(
+    current_user: dict = Depends(require_role([UserRole.CLIENT]))
+):
+    """Get all edit requests made by the current client"""
+    try:
+        result = supabase.table('document_edit_requests').select('*, documents(*)').eq('client_id', current_user["user_id"]).order('created_at', desc=True).execute()
+        
+        requests = []
+        for req in result.data:
+            requests.append(DocumentEditRequestResponse(**req))
+        
+        return requests
+    except Exception as e:
+        logger.error(f"Get client edit requests error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/documents/edit-requests/advocate", response_model=List[DocumentEditRequestResponse])
+async def get_advocate_edit_requests(
+    status: Optional[str] = None,
+    current_user: dict = Depends(require_role([UserRole.ADVOCATE]))
+):
+    """Get all edit requests for the current advocate"""
+    try:
+        # Get advocate profile
+        adv_profile = supabase.table('advocates').select('id').eq('user_id', current_user["user_id"]).execute()
+        if not adv_profile.data or len(adv_profile.data) == 0:
+            return []
+        
+        advocate_id = adv_profile.data[0]['id']
+        
+        query = supabase.table('document_edit_requests').select('*, documents(*), client:users!document_edit_requests_client_id_fkey(*)').eq('advocate_id', advocate_id)
+        
+        if status:
+            query = query.eq('status', status)
+        
+        result = query.order('created_at', desc=True).execute()
+        
+        requests = []
+        for req in result.data:
+            req_response = DocumentEditRequestResponse(**req)
+            if req.get('client'):
+                req_response.client = UserResponse(**req['client'])
+            requests.append(req_response)
+        
+        return requests
+    except Exception as e:
+        logger.error(f"Get advocate edit requests error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.patch("/documents/edit-requests/{request_id}", response_model=DocumentEditRequestResponse)
+async def update_edit_request(
+    request_id: str,
+    update_data: DocumentEditRequestUpdate,
+    current_user: dict = Depends(require_role([UserRole.ADVOCATE]))
+):
+    """Advocate approves or rejects an edit request"""
+    try:
+        # Get edit request
+        req_result = supabase.table('document_edit_requests').select('*').eq('id', request_id).execute()
+        
+        if not req_result.data or len(req_result.data) == 0:
+            raise HTTPException(status_code=404, detail="Edit request not found")
+        
+        edit_req = req_result.data[0]
+        
+        # Verify advocate owns this request
+        adv_profile = supabase.table('advocates').select('id').eq('user_id', current_user["user_id"]).execute()
+        if not adv_profile.data or adv_profile.data[0]['id'] != edit_req['advocate_id']:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Update request
+        update_dict = {"status": update_data.status}
+        if update_data.response_notes:
+            update_dict["response_notes"] = update_data.response_notes
+        
+        result = supabase.table('document_edit_requests').update(update_dict).eq('id', request_id).execute()
+        
+        # Notify client
+        notification_title = "Edit Request Approved" if update_data.status == "approved" else "Edit Request Rejected"
+        notification = {
+            "user_id": edit_req['client_id'],
+            "notification_type": NotificationType.SYSTEM,
+            "title": notification_title,
+            "message": f"Your document edit request has been {update_data.status}." + (f" Note: {update_data.response_notes}" if update_data.response_notes else ""),
+            "related_id": request_id
+        }
+        supabase.table('notifications').insert(notification).execute()
+        
+        return DocumentEditRequestResponse(**result.data[0])
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Update edit request error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/documents/{document_id}/edit-status")
+async def get_document_edit_status(
+    document_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Check if a document has an approved edit request"""
+    try:
+        # Get latest edit request for this document
+        result = supabase.table('document_edit_requests').select('*').eq('document_id', document_id).order('created_at', desc=True).limit(1).execute()
+        
+        if not result.data or len(result.data) == 0:
+            return {
+                "can_edit": False,
+                "status": "no_request",
+                "message": "No edit request found"
+            }
+        
+        latest_request = result.data[0]
+        
+        return {
+            "can_edit": latest_request['status'] == 'approved',
+            "status": latest_request['status'],
+            "request_id": latest_request['id'],
+            "response_notes": latest_request.get('response_notes')
+        }
+        
+    except Exception as e:
+        logger.error(f"Get edit status error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============= DOCUMENT VERSION ENDPOINTS =============
+@api_router.get("/documents/{document_id}/versions", response_model=List[DocumentVersion])
+async def get_document_versions(
+    document_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get version history for a document"""
+    try:
+        # Verify document access
+        document = supabase.table('documents').select('*, cases!inner(*)').eq('id', document_id).execute()
+        
+        if not document.data or len(document.data) == 0:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        doc = document.data[0]
+        case_data = doc.get('cases')
+        
+        # Check access
+        if current_user["role"] == UserRole.CLIENT and case_data['client_id'] != current_user["user_id"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+        elif current_user["role"] == UserRole.ADVOCATE:
+            adv_profile = supabase.table('advocates').select('id').eq('user_id', current_user["user_id"]).execute()
+            if not adv_profile.data or adv_profile.data[0]['id'] != case_data.get("advocate_id"):
+                raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Get versions
+        result = supabase.table('document_versions').select('*, edited_by_user:users!document_versions_edited_by_fkey(*)').eq('document_id', document_id).order('version_number', desc=True).execute()
+        
+        versions = []
+        for ver in result.data:
+            version = DocumentVersion(**ver)
+            if ver.get('edited_by_user'):
+                version.edited_by_user = UserResponse(**ver['edited_by_user'])
+            versions.append(version)
+        
+        return versions
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Get document versions error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/documents/{document_id}/versions", response_model=DocumentVersion)
+async def create_document_version(
+    document_id: str,
+    file: UploadFile = File(...),
+    changes_summary: str = Form(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Create a new version of a document (after edit approval)"""
+    try:
+        # Verify document exists and user has edit permission
+        document = supabase.table('documents').select('*, cases!inner(*)').eq('id', document_id).execute()
+        
+        if not document.data or len(document.data) == 0:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        doc = document.data[0]
+        case_data = doc.get('cases')
+        
+        # Check if client has approved edit request
+        if current_user["role"] == UserRole.CLIENT:
+            edit_request = supabase.table('document_edit_requests').select('*').eq('document_id', document_id).eq('status', 'approved').order('created_at', desc=True).limit(1).execute()
+            
+            if not edit_request.data or len(edit_request.data) == 0:
+                raise HTTPException(status_code=403, detail="No approved edit request found. Please request edit permission first.")
+        
+        # Get current version number
+        versions = supabase.table('document_versions').select('version_number').eq('document_id', document_id).order('version_number', desc=True).limit(1).execute()
+        
+        next_version = 2 if not versions.data else versions.data[0]['version_number'] + 1
+        
+        # Upload new version file
+        file_content = await file.read()
+        file_extension = file.filename.split('.')[-1] if '.' in file.filename else ''
+        unique_filename = f"{case_data['id']}/versions/{uuid.uuid4()}.{file_extension}"
+        
+        storage_response = supabase.storage.from_('case-documents').upload(
+            path=unique_filename,
+            file=file_content,
+            file_options={"content-type": file.content_type}
+        )
+        
+        public_url = supabase.storage.from_('case-documents').get_public_url(unique_filename)
+        
+        # Create version record
+        version_data = {
+            "document_id": document_id,
+            "version_number": next_version,
+            "file_url": public_url,
+            "file_path": unique_filename,
+            "edited_by": current_user["user_id"],
+            "changes_summary": changes_summary,
+            "file_size": len(file_content)
+        }
+        
+        result = supabase.table('document_versions').insert(version_data).execute()
+        
+        if not result.data or len(result.data) == 0:
+            raise HTTPException(status_code=500, detail="Failed to create document version")
+        
+        # Update main document URL to point to latest version
+        supabase.table('documents').update({
+            "cloudinary_url": public_url,
+            "cloudinary_public_id": unique_filename
+        }).eq('id', document_id).execute()
+        
+        # Notify other party
+        notify_user_id = case_data.get("advocate_id") if current_user["role"] == UserRole.CLIENT else case_data["client_id"]
+        if notify_user_id:
+            if current_user["role"] == UserRole.CLIENT:
+                adv = supabase.table('advocates').select('user_id').eq('id', notify_user_id).execute()
+                if adv.data:
+                    notify_user_id = adv.data[0]['user_id']
+            
+            notification = {
+                "user_id": notify_user_id,
+                "notification_type": NotificationType.DOCUMENT_UPLOADED,
+                "title": "Document Updated",
+                "message": f"Document '{doc['document_name']}' has been updated. Version {next_version} is now available.",
+                "related_id": document_id
+            }
+            supabase.table('notifications').insert(notification).execute()
+        
+        return DocumentVersion(**result.data[0])
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Create document version error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 # ============= MESSAGE ENDPOINTS =============

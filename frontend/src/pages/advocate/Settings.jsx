@@ -97,7 +97,7 @@ const Settings = () => {
 
   const loadPaymentSettings = async () => {
     try {
-      const token = localStorage.getItem('access_token');
+        const token = localStorage.getItem('token');
       const response = await axios.get(
         `${process.env.REACT_APP_BACKEND_URL}/api/payments/settings`,
         { headers: { Authorization: `Bearer ${token}` } }
@@ -137,13 +137,13 @@ const Settings = () => {
     try {
       setUploadingImage(true);
       
-      const token = localStorage.getItem('access_token');
-      const formData = new FormData();
-      formData.append('file', profileImage);
+      const token = localStorage.getItem('token');
+      const uploadFormData = new FormData();
+      uploadFormData.append('file', profileImage);
 
       const response = await axios.post(
         `${process.env.REACT_APP_BACKEND_URL}/api/users/profile-image`,
-        formData,
+        uploadFormData,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -190,13 +190,13 @@ const Settings = () => {
         await axios.patch(
           `${process.env.REACT_APP_BACKEND_URL}/api/advocates/${profile.id}`,
           updateData,
-          { headers: { Authorization: `Bearer ${localStorage.getItem('access_token')}` } }
+           { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
         );
       }
 
       // Save payment settings if changed
       if (paymentSettings.razorpay_key_id || paymentSettings.razorpay_key_secret) {
-        const token = localStorage.getItem('access_token');
+        const token = localStorage.getItem('token');
         await axios.post(
           `${process.env.REACT_APP_BACKEND_URL}/api/payments/settings`,
           paymentSettings,

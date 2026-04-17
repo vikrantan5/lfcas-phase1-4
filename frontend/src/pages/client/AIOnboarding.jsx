@@ -127,7 +127,8 @@ const AIOnboarding = () => {
     // NEW FLOW: Don't create case directly
     // Instead, guide user to find advocates and request meeting
     
-    if (!analysis || !analysis.data) {
+
+    if (!analysis) {
       toast({
         title: "Error",
         description: "No case analysis available",
@@ -590,10 +591,10 @@ const AIOnboarding = () => {
 
             {/* Content */}
             <div className="p-8">
-              {analysis.success && analysis.data ? (
+              {analysis && analysis.structured_output ? (
                 <div className="space-y-6">
                   {/* Case Type */}
-                  {analysis.data.case_classification && (
+                  {(analysis.case_type || analysis.structured_output.case_classification) && (
                     <div className="bg-purple-50 rounded-xl p-6 border border-purple-100">
                       <div className="flex items-center gap-3 mb-3">
                         <div className="w-10 h-10 bg-purple-500 rounded-lg flex items-center justify-center">
@@ -602,17 +603,17 @@ const AIOnboarding = () => {
                         <h3 className="text-xl font-semibold text-gray-900">Case Type</h3>
                       </div>
                       <p className="text-lg text-gray-700 font-medium">
-                        {formatCaseType(analysis.data.case_classification)}
+                        {formatCaseType(analysis.case_type || analysis.structured_output.case_classification)}
                       </p>
                     </div>
                   )}
 
                   {/* Legal Sections */}
-                  {analysis.data.legal_sections?.length > 0 && (
+                  {analysis.legal_sections?.length > 0 && (
                     <div className="bg-blue-50 rounded-xl p-6 border border-blue-100">
                       <h3 className="text-xl font-semibold text-gray-900 mb-4">Applicable Legal Sections</h3>
                       <ul className="space-y-2">
-                        {analysis.data.legal_sections.map((section, idx) => (
+                        {analysis.legal_sections.map((section, idx) => (
                           <li key={idx} className="flex items-start gap-3 text-gray-700">
                             <CheckCircle size={20} className="text-blue-600 mt-0.5 flex-shrink-0" />
                             <span>{section}</span>
@@ -623,11 +624,11 @@ const AIOnboarding = () => {
                   )}
 
                   {/* Required Documents */}
-                  {analysis.data.required_documents?.length > 0 && (
+                  {analysis.required_documents?.length > 0 && (
                     <div className="bg-green-50 rounded-xl p-6 border border-green-100">
                       <h3 className="text-xl font-semibold text-gray-900 mb-4">Required Documents</h3>
                       <ul className="space-y-2">
-                        {analysis.data.required_documents.map((doc, idx) => (
+                        {analysis.required_documents.map((doc, idx) => (
                           <li key={idx} className="flex items-start gap-3 text-gray-700">
                             <FileText size={20} className="text-green-600 mt-0.5 flex-shrink-0" />
                             <span>{doc}</span>
@@ -638,15 +639,14 @@ const AIOnboarding = () => {
                   )}
 
                   {/* Procedural Guidance */}
-                  {analysis.data.procedural_guidance && (
+                  {analysis.procedural_guidance && (
                     <div className="bg-amber-50 rounded-xl p-6 border border-amber-100">
                       <h3 className="text-xl font-semibold text-gray-900 mb-4">Next Steps</h3>
                       <p className="text-gray-700 whitespace-pre-line leading-relaxed">
-                        {analysis.data.procedural_guidance}
+                        {analysis.procedural_guidance}
                       </p>
                     </div>
                   )}
-
                   {/* Action Buttons - UPDATED FLOW */}
                   <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl p-6 border-2 border-purple-200">
                     <div className="flex items-start gap-3 mb-4">

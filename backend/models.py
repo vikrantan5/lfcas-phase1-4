@@ -19,6 +19,7 @@ class CaseType(str, Enum):
     CHILD_CUSTODY = "child_custody"
     DOWRY = "dowry"
     DOMESTIC_VIOLENCE = "domestic_violence"
+    PROPERTY_DISPUTE = "property_dispute"
     OTHER = "other"
 
 

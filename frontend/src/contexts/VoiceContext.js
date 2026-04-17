@@ -157,6 +157,8 @@ export const VoiceProvider = ({ children }) => {
 
       // Save user message to backend
       const token = localStorage.getItem('token');
+      
+      console.log('💾 Saving user message...');
       await axios.post(
         `${API}/voice/save-message`,
         {
@@ -167,8 +169,10 @@ export const VoiceProvider = ({ children }) => {
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      console.log('✅ User message saved');
 
       // Get AI's next question
+      console.log('🤖 Fetching AI response...');
       const response = await axios.post(
         `${API}/voice/get-next-question`,
         {
@@ -178,6 +182,7 @@ export const VoiceProvider = ({ children }) => {
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      console.log('✅ AI response received:', response.data);
 
       if (response.data.success) {
         const aiResponse = response.data.next_question;
@@ -194,6 +199,7 @@ export const VoiceProvider = ({ children }) => {
         setMessages(prev => [...prev, aiMsg]);
 
         // Save AI message to backend
+        console.log('💾 Saving AI response...');
         await axios.post(
           `${API}/voice/save-message`,
           {
@@ -204,13 +210,24 @@ export const VoiceProvider = ({ children }) => {
           },
           { headers: { Authorization: `Bearer ${token}` } }
         );
+        console.log('✅ AI response saved');
 
-        // Speak the AI response
+        // Speak AI response
         speakText(aiResponse, language);
+      } else {
+        throw new Error('AI response failed');
       }
-    } catch (error) {
-      console.error('Error handling user speech:', error);
-      setError('Failed to process your message. Please try again.');
+    } catch (err) {
+      console.error('❌ Error in handleUserSpeech:', err);
+      setError(`Failed to get AI response: ${err.response?.data?.detail || err.message || 'Unknown error'}. Please try again or use text input.`);
+      
+      // Add error message to UI
+      const errorMsg = {
+        sender: 'ai',
+        message: 'Sorry, I encountered an error. Please try again or rephrase your question.',
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorMsg]);
     }
   };
 
@@ -355,7 +372,7 @@ export const VoiceProvider = ({ children }) => {
     }
   }, []);
 
-  // Process conversation (final analysis)
+   // Process conversation (final analysis)
   const processConversation = useCallback(async (conversationTranscript) => {
     if (!session) {
       throw new Error('No active session');
@@ -388,8 +405,12 @@ export const VoiceProvider = ({ children }) => {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       
-      console.log('✅ Conversation processed:', response.data);
+      console.log('✅ Conversation processed successfully');
+      console.log('📊 Analysis data:', response.data.analysis);
+      console.log('📄 Case draft:', response.data.case_draft);
+      console.log('👥 Advocates:', response.data.recommended_advocates);
       
+      // Set the analysis data directly from response
       setAnalysis(response.data.analysis);
       setCaseDraft(response.data.case_draft);
       setRecommendedAdvocates(response.data.recommended_advocates || []);
@@ -397,6 +418,7 @@ export const VoiceProvider = ({ children }) => {
       return response.data;
     } catch (error) {
       console.error('❌ Error processing conversation:', error);
+      console.error('Error details:', error.response?.data);
       throw error;
     } finally {
       setIsProcessing(false);

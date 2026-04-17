@@ -2211,16 +2211,41 @@ async def get_advocate_reminders(
 async def get_platform_stats(
     current_user: dict = Depends(require_role([UserRole.PLATFORM_MANAGER]))
 ):
-    """Get platform statistics"""
+    """Get enhanced platform statistics for admin dashboard"""
+    # Users stats
     total_users = supabase.table('users').select('*', count='exact').execute().count
     total_clients = supabase.table('users').select('*', count='exact').eq('role', 'client').execute().count
     total_advocates = supabase.table('advocates').select('*', count='exact').execute().count
+    
+    # New user registrations (last 30 days)
+    from datetime import timedelta
+    thirty_days_ago = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    new_users = supabase.table('users').select('*', count='exact').gte('created_at', thirty_days_ago).execute().count
+    
+    # Advocates stats
     approved_advocates = supabase.table('advocates').select('*', count='exact').eq('status', 'approved').execute().count
     pending_advocates = supabase.table('advocates').select('*', count='exact').eq('status', 'pending_approval').execute().count
+    rejected_advocates = supabase.table('advocates').select('*', count='exact').eq('status', 'rejected').execute().count
     
+    # Cases stats
     total_cases = supabase.table('cases').select('*', count='exact').execute().count
     active_cases = supabase.table('cases').select('*', count='exact').neq('current_stage', 'CLOSED').execute().count
     closed_cases = supabase.table('cases').select('*', count='exact').eq('current_stage', 'CLOSED').execute().count
+    
+    # Case distribution by type
+    case_types = {}
+    for case_type in CaseType:
+        count = supabase.table('cases').select('*', count='exact').eq('case_type', case_type.value).execute().count
+        case_types[case_type.value] = count
+    
+    # Case progress stages
+    petition_filed = supabase.table('cases').select('*', count='exact').eq('current_stage', 'PETITION_FILED').execute().count
+    hearing_scheduled_count = supabase.table('cases').select('*', count='exact').eq('current_stage', 'HEARING_SCHEDULED').execute().count
+    judgment_pending = supabase.table('cases').select('*', count='exact').eq('current_stage', 'JUDGMENT_PENDING').execute().count
+    
+    # Hearings stats
+    total_hearings = supabase.table('hearings').select('*', count='exact').execute().count
+    upcoming_hearings_count = supabase.table('hearings').select('*', count='exact').gte('hearing_date', datetime.now(timezone.utc).isoformat()).eq('is_completed', False).execute().count
     
     # Meeting requests stats
     total_meeting_requests = supabase.table('meeting_requests').select('*', count='exact').execute().count
@@ -2229,31 +2254,69 @@ async def get_platform_stats(
     # Meetings stats
     total_meetings = supabase.table('meetings').select('*', count='exact').execute().count
     
-    # Case distribution by type
-    case_types = {}
-    for case_type in CaseType:
-        count = supabase.table('cases').select('*', count='exact').eq('case_type', case_type.value).execute().count
-        case_types[case_type.value] = count
+    # Recent activity for dashboard
+    recent_cases = supabase.table('cases').select('*').order('created_at', desc=True).limit(10).execute().data
+    recent_meetings = supabase.table('meetings').select('*').order('created_at', desc=True).limit(10).execute().data
     
-    # Recent activity
-    recent_cases = supabase.table('cases').select('*').order('created_at', desc=True).limit(5).execute().data
-    recent_meetings = supabase.table('meetings').select('*').order('created_at', desc=True).limit(5).execute().data
+    # Pending advocates for review
+    pending_advocates_list = supabase.table('advocates').select('*, users(*)').eq('status', 'pending_approval').order('created_at', desc=True).limit(10).execute().data
+    
+    # Recent activities (combining various actions)
+    activity_log = []
+    
+    # Recent advocate approvals
+    recent_approvals = supabase.table('advocates').select('*, users(*)').eq('status', 'approved').order('updated_at', desc=True).limit(3).execute().data
+    for adv in recent_approvals:
+        activity_log.append({
+            "type": "advocate_approved",
+            "message": f"Advocate {adv.get('users', {}).get('full_name', 'Unknown')} approved",
+            "timestamp": adv.get('updated_at'),
+            "icon": "check"
+        })
+    
+    # Recent case creations
+    for case in recent_cases[:3]:
+        activity_log.append({
+            "type": "case_created",
+            "message": f"New Case: {case.get('case_type', 'Unknown')} - #{case.get('id', '')[:8]}",
+            "timestamp": case.get('created_at'),
+            "icon": "case"
+        })
+    
+    # Sort activity log by timestamp
+    activity_log.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+    
+    # Upcoming hearings for alerts
+    upcoming_hearings = supabase.table('hearings').select('*, cases(*)').gte('hearing_date', datetime.now(timezone.utc).isoformat()).eq('is_completed', False).order('hearing_date').limit(5).execute().data
     
     return {
         "users": {
             "total": total_users,
             "clients": total_clients,
-            "advocates": total_advocates
+            "advocates": total_advocates,
+            "new_registrations": new_users
         },
         "advocates": {
             "approved": approved_advocates,
-            "pending": pending_advocates
+            "pending": pending_advocates,
+            "rejected": rejected_advocates,
+            "pending_list": pending_advocates_list
         },
         "cases": {
             "total": total_cases,
             "active": active_cases,
             "closed": closed_cases,
             "by_type": case_types
+        },
+        "case_progress": {
+            "petition_filed": petition_filed,
+            "hearing_scheduled": hearing_scheduled_count,
+            "judgment_pending": judgment_pending
+        },
+        "hearings": {
+            "total": total_hearings,
+            "upcoming": upcoming_hearings_count,
+            "upcoming_list": upcoming_hearings
         },
         "meeting_requests": {
             "total": total_meeting_requests,
@@ -2262,10 +2325,10 @@ async def get_platform_stats(
         "meetings": {
             "total": total_meetings
         },
+        "activity_log": activity_log,
         "recent_cases": recent_cases,
         "recent_meetings": recent_meetings
     }
-
 
 @api_router.get("/admin/logs", response_model=List[AdminLog])
 async def get_admin_logs(

@@ -162,7 +162,7 @@ class AdvocateResponse(BaseModel):
     id: str
     user_id: str
     bar_council_id: str
-    specialization: List[str]
+    specializations: List[str]  # Fixed: changed from specialization to specializations to match database
     experience_years: int
     location: str
     bio: Optional[str] = None

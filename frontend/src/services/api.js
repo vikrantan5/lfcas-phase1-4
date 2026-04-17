@@ -36,6 +36,7 @@ export const authAPI = {
   register: (data) => api.post('/auth/register', data),
   login: (data) => api.post('/auth/login', data),
   getMe: () => api.get('/auth/me'),
+   updateOnboardingStatus: (completed) => api.patch('/users/onboarding-status', null, { params: { completed } }),
 };
 
 // Advocate APIs
@@ -73,6 +74,7 @@ export const meetingAPI = {
 export const caseAPI = {
   list: (params) => api.get('/cases', { params }),
   getById: (id) => api.get(`/cases/${id}`),
+    create: (data) => api.post('/cases/draft', data),
   updateStage: (id, data) => api.patch(`/cases/${id}/stage`, data),
   getStageHistory: (id) => api.get(`/cases/${id}/stage-history`),
 };

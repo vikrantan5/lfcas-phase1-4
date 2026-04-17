@@ -68,6 +68,18 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  const updateUser = async () => {
+    try {
+      const response = await authAPI.getMe();
+      setUser(response.data);
+      localStorage.setItem('user', JSON.stringify(response.data));
+      return response.data;
+    } catch (error) {
+      console.error('Failed to update user:', error);
+      return null;
+    }
+  };
+
   const value = {
     user,
     token,
@@ -75,6 +87,7 @@ export const AuthProvider = ({ children }) => {
     login,
     register,
     logout,
+    updateUser,
     isAuthenticated: !!token && !!user,
   };
 

@@ -9,6 +9,7 @@ import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import ClientDashboard from './pages/client/ClientDashboard';
 import CaseDetailPage from './pages/client/CaseDetail';
+import AIOnboarding from './pages/client/AIOnboarding';
 
 import ClientPayments from './pages/client/Payments';
 import AdvocateDashboard from './pages/advocate/AdvocateDashboard';
@@ -93,11 +94,24 @@ function App() {
               <Route path="/" element={<Home />} />
 
               {/* Client Routes */}
+              {/* AI Onboarding Route - No onboarding check needed here */}
+              <Route
+                path="/client/ai-onboarding"
+                element={
+                  <ProtectedRoute allowedRoles={['client']}>
+                    <AIOnboarding />
+                  </ProtectedRoute>
+                }
+              />
+              
+              {/* Client Dashboard - With onboarding check */}
               <Route
                 path="/client/dashboard"
                 element={
                   <ProtectedRoute allowedRoles={['client']}>
-                    <ClientDashboard />
+                    <ClientRouteWithOnboarding>
+                      <ClientDashboard />
+                    </ClientRouteWithOnboarding>
                   </ProtectedRoute>
                 }
               />
@@ -222,9 +236,7 @@ function App() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
             
-            {/* Voice Assistant - Available globally when logged in */}
-            <VoiceAssistantButton />
-            <VoiceAssistantModal />
+
           </BrowserRouter>
           <Toaster />
         </VoiceProvider>

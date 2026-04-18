@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { adminAPI, advocateAPI } from '../../services/api';
+import { adminAPI } from '../../services/api';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
 import {
   Scale,
   Bell,
@@ -22,26 +22,40 @@ import {
   Calendar
 } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui/dialog';
 
 const NewAdminDashboard = () => {
   const { user, logout } = useAuth();
   const { toast } = useToast();
   
   const [stats, setStats] = useState(null);
+  const [timelineData, setTimelineData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState(0);
+  const [selectedAdvocate, setSelectedAdvocate] = useState(null);
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
     loadData();
-    // Check for notifications
-    setNotifications(2); // Placeholder
   }, []);
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const statsResponse = await adminAPI.getStats();
+      const [statsResponse, timelineResponse] = await Promise.all([
+        adminAPI.getStats(),
+        adminAPI.getTimelineAnalytics(7)
+      ]);
       setStats(statsResponse.data);
+      setTimelineData(timelineResponse.data);
     } catch (error) {
       console.error('Failed to load data:', error);
       toast({
@@ -55,11 +69,104 @@ const NewAdminDashboard = () => {
   };
 
   const handleReview = (advocate) => {
-    // Navigate to review page or open modal
-    toast({
-      title: "Review",
-      description: `Opening review for ${advocate.user?.full_name}`,
-    });
+    setSelectedAdvocate(advocate);
+    setReviewModalOpen(true);
+  };
+
+  const handleApprove = async () => {
+    if (!selectedAdvocate) return;
+    
+    try {
+      setActionLoading(true);
+      await adminAPI.approveAdvocate(selectedAdvocate.id);
+      toast({
+        title: "Success",
+        description: `${selectedAdvocate.users?.full_name || 'Advocate'} has been approved!`,
+      });
+      setReviewModalOpen(false);
+      loadData(); // Reload data
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to approve advocate. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!selectedAdvocate) return;
+    
+    try {
+      setActionLoading(true);
+      await adminAPI.rejectAdvocate(selectedAdvocate.id, "Application does not meet requirements");
+      toast({
+        title: "Rejected",
+        description: `${selectedAdvocate.users?.full_name || 'Advocate'} has been rejected.`,
+      });
+      setReviewModalOpen(false);
+      loadData(); // Reload data
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to reject advocate. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const downloadReport = async (type) => {
+    try {
+      let response;
+      let filename;
+      
+      toast({
+        title: "Downloading...",
+        description: "Preparing your report",
+      });
+
+      switch(type) {
+        case 'cases':
+          response = await adminAPI.downloadCasesReport();
+          filename = `cases_report_${new Date().toISOString().split('T')[0]}.csv`;
+          break;
+        case 'feedback':
+          response = await adminAPI.downloadFeedbackReport();
+          filename = `feedback_report_${new Date().toISOString().split('T')[0]}.csv`;
+          break;
+        case 'revenue':
+          response = await adminAPI.downloadRevenueReport();
+          filename = `revenue_report_${new Date().toISOString().split('T')[0]}.csv`;
+          break;
+        default:
+          return;
+      }
+
+      // Create blob and download
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      toast({
+        title: "Success",
+        description: "Report downloaded successfully!",
+      });
+    } catch (error) {
+      console.error('Download error:', error);
+      toast({
+        title: "Error",
+        description: "Failed to download report. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   const formatCaseType = (type) => {
@@ -82,6 +189,14 @@ const NewAdminDashboard = () => {
   ] : [];
 
   const totalCases = pieChartData.reduce((sum, item) => sum + item.value, 0);
+
+  // Prepare line chart data
+  const lineChartData = timelineData?.timeline?.map(day => ({
+    date: new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    Cases: day.cases,
+    Hearings: day.hearings,
+    Clients: day.clients
+  })) || [];
 
   if (loading) {
     return (
@@ -148,54 +263,62 @@ const NewAdminDashboard = () => {
           <Card className="bg-[#F9C74F] border-none shadow-lg hover:shadow-xl transition-shadow">
             <CardContent className="pt-6">
               <div className="text-center">
+                <Clock className="w-12 h-12 mx-auto mb-3 text-white" />
                 <p className="text-sm font-medium text-gray-800 mb-2">Pending Approvals</p>
-                <p className="text-5xl font-bold text-[#3B4FAE]">{stats?.advocates?.pending || 0}</p>
+                <p className="text-4xl font-bold text-white">{stats?.advocates?.pending || 0}</p>
+                <p className="text-xs text-gray-700 mt-2">Advocates awaiting review</p>
               </div>
             </CardContent>
           </Card>
 
-          {/* Total Active Cases - Blue */}
+          {/* Total Cases - Blue */}
           <Card className="bg-[#3B4FAE] border-none shadow-lg hover:shadow-xl transition-shadow">
             <CardContent className="pt-6">
               <div className="text-center">
-                <p className="text-sm font-medium text-white mb-2">Total Active Cases</p>
-                <p className="text-5xl font-bold text-white">{stats?.cases?.active || 0}</p>
+                <FileText className="w-12 h-12 mx-auto mb-3 text-white" />
+                <p className="text-sm font-medium text-gray-200 mb-2">Total Cases</p>
+                <p className="text-4xl font-bold text-white">{stats?.cases?.total || 0}</p>
+                <p className="text-xs text-gray-200 mt-2">{stats?.cases?.active || 0} active cases</p>
               </div>
             </CardContent>
           </Card>
 
-          {/* Upcoming Hearings - Red */}
-          <Card className="bg-[#F94144] border-none shadow-lg hover:shadow-xl transition-shadow">
-            <CardContent className="pt-6">
-              <div className="text-center">
-                <p className="text-sm font-medium text-white mb-2">Upcoming Hearings</p>
-                <p className="text-5xl font-bold text-white">{stats?.hearings?.upcoming || 0}</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* New User Registrations - Green */}
+          {/* Revenue - Green */}
           <Card className="bg-[#43AA8B] border-none shadow-lg hover:shadow-xl transition-shadow">
             <CardContent className="pt-6">
               <div className="text-center">
-                <p className="text-sm font-medium text-white mb-2">New User Registrations</p>
-                <p className="text-5xl font-bold text-white">{stats?.users?.new_registrations || 0}</p>
+                <DollarSign className="w-12 h-12 mx-auto mb-3 text-white" />
+                <p className="text-sm font-medium text-gray-200 mb-2">Total Users</p>
+                <p className="text-4xl font-bold text-white">{stats?.users?.total || 0}</p>
+                <p className="text-xs text-gray-200 mt-2">{stats?.users?.clients || 0} clients</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Platform Activity - Red */}
+          <Card className="bg-[#F94144] border-none shadow-lg hover:shadow-xl transition-shadow">
+            <CardContent className="pt-6">
+              <div className="text-center">
+                <TrendingUp className="w-12 h-12 mx-auto mb-3 text-white" />
+                <p className="text-sm font-medium text-gray-200 mb-2">Active Hearings</p>
+                <p className="text-4xl font-bold text-white">{stats?.hearings?.upcoming || 0}</p>
+                <p className="text-xs text-gray-200 mt-2">Scheduled hearings</p>
               </div>
             </CardContent>
           </Card>
         </div>
 
         {/* Two Column Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           {/* Left Column */}
           <div className="space-y-6">
-            {/* Advocate Verification */}
+            {/* Advocate Status Breakdown */}
             <Card className="shadow-md">
               <CardHeader>
-                <CardTitle className="text-[#3B4FAE] text-lg">Advocate Verification</CardTitle>
+                <CardTitle className="text-[#3B4FAE] text-lg">Advocate Status Breakdown</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex justify-around items-center">
+                <div className="grid grid-cols-3 gap-4">
                   {/* Pending */}
                   <div className="flex flex-col items-center">
                     <div className="flex items-center space-x-2 mb-2">
@@ -236,28 +359,33 @@ const NewAdminDashboard = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {stats?.advocates?.pending_list?.slice(0, 3).map((advocate) => (
-                    <div key={advocate.id} className="flex items-center justify-between py-3 border-b last:border-0">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
-                          <User className="w-6 h-6 text-gray-600" />
+                  {stats?.advocates?.pending_list && stats.advocates.pending_list.length > 0 ? (
+                    stats.advocates.pending_list.slice(0, 3).map((advocate) => (
+                      <div key={advocate.id} className="flex items-center justify-between py-3 border-b last:border-0">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
+                            <User className="w-6 h-6 text-gray-600" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900">{advocate.users?.full_name || advocate.user?.full_name || 'N/A'}</p>
+                            <p className="text-xs text-gray-600">
+                              {advocate.specializations?.[0] ? formatCaseType(advocate.specializations[0]) : 'Law'}, {advocate.location || 'N/A'}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-medium text-gray-900">{advocate.user?.full_name || 'N/A'}</p>
-                          <p className="text-xs text-gray-600">
-                            {advocate.specializations?.[0] ? formatCaseType(advocate.specializations[0]) : 'Law'}, {advocate.location}
-                          </p>
-                        </div>
+                        <Button 
+                          size="sm" 
+                          className="bg-[#3B4FAE] hover:bg-[#2E3D8F] text-white"
+                          onClick={() => handleReview(advocate)}
+                          data-testid={`review-advocate-${advocate.id}`}
+                        >
+                          Review
+                        </Button>
                       </div>
-                      <Button 
-                        size="sm" 
-                        className="bg-[#3B4FAE] hover:bg-[#2E3D8F] text-white"
-                        onClick={() => handleReview(advocate)}
-                      >
-                        Review
-                      </Button>
-                    </div>
-                  )) || <p className="text-center text-gray-500 py-4">No pending applications</p>}
+                    ))
+                  ) : (
+                    <p className="text-center text-gray-500 py-4">No pending applications</p>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -269,14 +397,18 @@ const NewAdminDashboard = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {stats?.hearings?.upcoming_list?.slice(0, 3).map((hearing, idx) => (
-                    <div key={idx} className="flex items-start space-x-3">
-                      <div className="w-2 h-2 bg-[#F94144] rounded-full mt-2"></div>
-                      <p className="text-sm text-gray-700">
-                        Hearing scheduled for Case #{hearing.case_id?.slice(0, 8)} on {formatDate(hearing.hearing_date)}
-                      </p>
-                    </div>
-                  )) || <p className="text-center text-gray-500 py-4">No alerts</p>}
+                  {stats?.hearings?.upcoming_list && stats.hearings.upcoming_list.length > 0 ? (
+                    stats.hearings.upcoming_list.slice(0, 3).map((hearing, idx) => (
+                      <div key={idx} className="flex items-start space-x-3">
+                        <div className="w-2 h-2 bg-[#F94144] rounded-full mt-2"></div>
+                        <p className="text-sm text-gray-700">
+                          Hearing scheduled for Case #{hearing.case_id?.slice(0, 8)} on {formatDate(hearing.hearing_date)}
+                        </p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-center text-gray-500 py-4">No alerts</p>
+                  )}
                   
                   {stats?.meeting_requests?.pending > 0 && (
                     <div className="flex items-start space-x-3">
@@ -303,7 +435,7 @@ const NewAdminDashboard = () => {
             {/* Case Statistics Pie Chart */}
             <Card className="shadow-md">
               <CardHeader>
-                <CardTitle className="text-[#3B4FAE] text-lg">Case Statistics</CardTitle>
+                <CardTitle className="text-[#3B4FAE] text-lg">Case Statistics by Type</CardTitle>
               </CardHeader>
               <CardContent>
                 {totalCases > 0 ? (
@@ -339,6 +471,33 @@ const NewAdminDashboard = () => {
               </CardContent>
             </Card>
 
+            {/* Timeline Chart - NEW */}
+            <Card className="shadow-md">
+              <CardHeader>
+                <CardTitle className="text-[#3B4FAE] text-lg">Activity Timeline (Last 7 Days)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {lineChartData.length > 0 ? (
+                  <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={lineChartData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="date" />
+                        <YAxis />
+                        <Tooltip />
+                        <Legend />
+                        <Line type="monotone" dataKey="Cases" stroke="#3B4FAE" strokeWidth={2} />
+                        <Line type="monotone" dataKey="Hearings" stroke="#F9C74F" strokeWidth={2} />
+                        <Line type="monotone" dataKey="Clients" stroke="#43AA8B" strokeWidth={2} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <p className="text-center text-gray-500 py-8">No timeline data available</p>
+                )}
+              </CardContent>
+            </Card>
+
             {/* Activity Log */}
             <Card className="shadow-md">
               <CardHeader>
@@ -346,21 +505,25 @@ const NewAdminDashboard = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {stats?.activity_log?.slice(0, 5).map((activity, idx) => (
-                    <div key={idx} className="flex items-start space-x-3">
-                      {activity.icon === 'check' ? (
-                        <CheckCircle className="w-5 h-5 text-[#43AA8B] mt-0.5" />
-                      ) : activity.icon === 'case' ? (
-                        <CheckCircle className="w-5 h-5 text-[#3B4FAE] mt-0.5" />
-                      ) : (
-                        <XCircle className="w-5 h-5 text-[#F94144] mt-0.5" />
-                      )}
-                      <div className="flex-1">
-                        <p className="text-sm text-gray-800">{activity.message}</p>
-                        <p className="text-xs text-gray-500">{formatDate(activity.timestamp)}</p>
+                  {stats?.activity_log && stats.activity_log.length > 0 ? (
+                    stats.activity_log.slice(0, 5).map((activity, idx) => (
+                      <div key={idx} className="flex items-start space-x-3">
+                        {activity.icon === 'check' ? (
+                          <CheckCircle className="w-5 h-5 text-[#43AA8B] mt-0.5" />
+                        ) : activity.icon === 'case' ? (
+                          <FileText className="w-5 h-5 text-[#3B4FAE] mt-0.5" />
+                        ) : (
+                          <XCircle className="w-5 h-5 text-[#F94144] mt-0.5" />
+                        )}
+                        <div className="flex-1">
+                          <p className="text-sm text-gray-800">{activity.message}</p>
+                          <p className="text-xs text-gray-500">{formatDate(activity.timestamp)}</p>
+                        </div>
                       </div>
-                    </div>
-                  )) || <p className="text-center text-gray-500 py-4">No recent activity</p>}
+                    ))
+                  ) : (
+                    <p className="text-center text-gray-500 py-4">No recent activity</p>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -375,6 +538,8 @@ const NewAdminDashboard = () => {
                   <Button 
                     variant="outline" 
                     className="w-full justify-start text-gray-700 hover:bg-gray-50"
+                    onClick={() => downloadReport('cases')}
+                    data-testid="download-cases-report"
                   >
                     <Download className="w-4 h-4 mr-2" />
                     Download Case Summaries
@@ -382,6 +547,8 @@ const NewAdminDashboard = () => {
                   <Button 
                     variant="outline" 
                     className="w-full justify-start text-gray-700 hover:bg-gray-50"
+                    onClick={() => downloadReport('feedback')}
+                    data-testid="download-feedback-report"
                   >
                     <MessageSquare className="w-4 h-4 mr-2" />
                     User Feedback Reports
@@ -389,6 +556,8 @@ const NewAdminDashboard = () => {
                   <Button 
                     variant="outline" 
                     className="w-full justify-start text-gray-700 hover:bg-gray-50"
+                    onClick={() => downloadReport('revenue')}
+                    data-testid="download-revenue-report"
                   >
                     <DollarSign className="w-4 h-4 mr-2" />
                     Revenue Insights
@@ -453,6 +622,71 @@ const NewAdminDashboard = () => {
           </CardContent>
         </Card>
       </main>
+
+      {/* Review Modal */}
+      <Dialog open={reviewModalOpen} onOpenChange={setReviewModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Review Advocate Application</DialogTitle>
+            <DialogDescription>
+              Review the advocate's application and decide to approve or reject.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedAdvocate && (
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm font-medium text-gray-700">Name</p>
+                <p className="text-base">{selectedAdvocate.users?.full_name || selectedAdvocate.user?.full_name || 'N/A'}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-700">Bar Council ID</p>
+                <p className="text-base">{selectedAdvocate.bar_council_id || 'N/A'}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-700">Experience</p>
+                <p className="text-base">{selectedAdvocate.experience_years || 0} years</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-700">Location</p>
+                <p className="text-base">{selectedAdvocate.location || 'N/A'}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-700">Specializations</p>
+                <p className="text-base">
+                  {selectedAdvocate.specializations?.map(s => formatCaseType(s)).join(', ') || 'N/A'}
+                </p>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex space-x-2">
+            <Button
+              variant="outline"
+              onClick={() => setReviewModalOpen(false)}
+              disabled={actionLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleReject}
+              disabled={actionLoading}
+              data-testid="reject-advocate-confirm"
+            >
+              {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Reject'}
+            </Button>
+            <Button
+              onClick={handleApprove}
+              disabled={actionLoading}
+              className="bg-[#43AA8B] hover:bg-[#368F75]"
+              data-testid="approve-advocate-confirm"
+            >
+              {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Approve'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

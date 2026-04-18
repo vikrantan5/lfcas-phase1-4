@@ -151,6 +151,12 @@ export const ratingAPI = {
 export const adminAPI = {
   getStats: () => api.get('/admin/stats'),
   getLogs: (params) => api.get('/admin/logs', { params }),
+   getTimelineAnalytics: (days = 7) => api.get('/admin/analytics/timeline', { params: { days } }),
+  approveAdvocate: (id) => api.patch(`/advocates/${id}/approve`),
+  rejectAdvocate: (id, reason) => api.patch(`/advocates/${id}/reject`, null, { params: { reason } }),
+  downloadCasesReport: () => api.get('/admin/reports/cases', { responseType: 'blob' }),
+  downloadFeedbackReport: () => api.get('/admin/reports/feedback', { responseType: 'blob' }),
+  downloadRevenueReport: () => api.get('/admin/reports/revenue', { responseType: 'blob' }),
 };
 
 

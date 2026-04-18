@@ -2779,6 +2779,340 @@ async def get_admin_logs(
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ============= ADDITIONAL ADMIN ENDPOINTS =============nn
+# 
+@api_router.get("/admin/analytics/timeline")
+async def get_timeline_analytics(
+    current_user: dict = Depends(require_role([UserRole.PLATFORM_MANAGER])),
+    days: int = 7
+):
+    """Get timeline analytics for cases, hearings, and clients (last 7 days)"""
+    try:
+        from datetime import timedelta
+        end_date = datetime.now(timezone.utc)
+        start_date = end_date - timedelta(days=days)
+        timeline_data = []
+        
+        for i in range(days):
+            current_day = start_date + timedelta(days=i)
+            next_day = current_day + timedelta(days=1)
+            day_start = current_day.isoformat()
+            day_end = next_day.isoformat()
+            
+            cases_count = supabase.table('cases').select('*', count='exact').gte('created_at', day_start).lt('created_at', day_end).execute().count or 0
+            hearings_count = supabase.table('hearings').select('*', count='exact').gte('hearing_date', day_start).lt('hearing_date', day_end).execute().count or 0
+            clients_count = supabase.table('users').select('*', count='exact').eq('role', 'client').gte('created_at', day_start).lt('created_at', day_end).execute().count or 0
+            
+            timeline_data.append({
+                "date": current_day.strftime('%Y-%m-%d'),
+                "cases": cases_count,
+                "hearings": hearings_count,
+                "clients": clients_count
+            })
+        
+        return {
+            "timeline": timeline_data,
+            "summary": {
+                "total_cases": sum(d["cases"] for d in timeline_data),
+                "total_hearings": sum(d["hearings"] for d in timeline_data),
+                "total_clients": sum(d["clients"] for d in timeline_data)
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error fetching timeline analytics: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.patch("/advocates/{advocate_id}/approve")
+async def approve_advocate(
+    advocate_id: str,
+    current_user: dict = Depends(require_role([UserRole.PLATFORM_MANAGER]))
+):
+    """Approve an advocate application"""
+    try:
+        result = supabase.table('advocates').update({
+            "status": "approved",
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }).eq('id', advocate_id).execute()
+        
+        if not result.data or len(result.data) == 0:
+            raise HTTPException(status_code=404, detail="Advocate not found")
+        
+        advocate = result.data[0]
+        
+        notification = {
+            "user_id": advocate["user_id"],
+            "notification_type": "system",
+            "title": "Application Approved! 🎉",
+            "message": "Congratulations! Your advocate application has been approved. You can now start accepting cases."
+        }
+        supabase.table('notifications').insert(notification).execute()
+        
+        admin_log = {
+            "admin_id": current_user["user_id"],
+            "action": "approve_advocate",
+            "target_type": "advocate",
+            "target_id": advocate_id,
+            "details": {"status": "approved"}
+        }
+        supabase.table('admin_logs').insert(admin_log).execute()
+        
+        return {"message": "Advocate approved successfully", "advocate": advocate}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error approving advocate: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.patch("/advocates/{advocate_id}/reject")
+async def reject_advocate(
+    advocate_id: str,
+    current_user: dict = Depends(require_role([UserRole.PLATFORM_MANAGER])),
+    reason: Optional[str] = None
+):
+    """Reject an advocate application"""
+    try:
+        result = supabase.table('advocates').update({
+            "status": "rejected",
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }).eq('id', advocate_id).execute()
+        
+        if not result.data or len(result.data) == 0:
+            raise HTTPException(status_code=404, detail="Advocate not found")
+        
+        advocate = result.data[0]
+        
+        notification_message = "Your advocate application has been reviewed and we regret to inform you that it has not been approved at this time."
+        if reason:
+            notification_message += f" Reason: {reason}"
+        
+        notification = {
+            "user_id": advocate["user_id"],
+            "notification_type": "system",
+            "title": "Application Status Update",
+            "message": notification_message
+        }
+        supabase.table('notifications').insert(notification).execute()
+        
+        admin_log = {
+            "admin_id": current_user["user_id"],
+            "action": "reject_advocate",
+            "target_type": "advocate",
+            "target_id": advocate_id,
+            "details": {"status": "rejected", "reason": reason}
+        }
+        supabase.table('admin_logs').insert(admin_log).execute()
+        
+        return {"message": "Advocate rejected", "advocate": advocate}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error rejecting advocate: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/admin/reports/cases")
+async def download_cases_report(
+    current_user: dict = Depends(require_role([UserRole.PLATFORM_MANAGER]))
+):
+    """Download cases summary report as CSV"""
+    try:
+        from fastapi.responses import StreamingResponse
+        import io
+        import csv
+        
+        cases = supabase.table('cases').select('*, advocates(*, users(*)), users(*)').order('created_at', desc=True).execute().data
+        
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['Case ID', 'Case Type', 'Client Name', 'Client Email', 'Advocate Name', 'Current Stage', 'Created Date', 'Status'])
+        
+        for case in cases:
+            client = case.get('users', {})
+            advocate_data = case.get('advocates', {})
+            advocate_user = advocate_data.get('users', {}) if advocate_data else {}
+            
+            writer.writerow([
+                case.get('id', '')[:8],
+                case.get('case_type', ''),
+                client.get('full_name', 'N/A'),
+                client.get('email', 'N/A'),
+                advocate_user.get('full_name', 'Not Assigned'),
+                case.get('current_stage', ''),
+                case.get('created_at', '')[:10],
+                'Active' if case.get('current_stage') != 'CLOSED' else 'Closed'
+            ])
+        
+        output.seek(0)
+        
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=cases_report_{datetime.now().strftime('%Y%m%d')}.csv"}
+        )
+    except Exception as e:
+        logger.error(f"Error generating cases report: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/admin/reports/feedback")
+async def download_feedback_report(
+    current_user: dict = Depends(require_role([UserRole.PLATFORM_MANAGER]))
+):
+    """Download user feedback/ratings report as CSV"""
+    try:
+        from fastapi.responses import StreamingResponse
+        import io
+        import csv
+        
+        ratings = supabase.table('ratings').select('*, advocates(*, users(*)), users(*)').order('created_at', desc=True).execute().data
+        
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['Rating ID', 'Advocate Name', 'Client Name', 'Rating', 'Review', 'Created Date'])
+        
+        for rating in ratings:
+            advocate_data = rating.get('advocates', {})
+            advocate_user = advocate_data.get('users', {}) if advocate_data else {}
+            client = rating.get('users', {})
+            
+            writer.writerow([
+                rating.get('id', '')[:8],
+                advocate_user.get('full_name', 'N/A'),
+                client.get('full_name', 'N/A'),
+                rating.get('rating', 0),
+                rating.get('review', 'No review'),
+                rating.get('created_at', '')[:10]
+            ])
+        
+        output.seek(0)
+        
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=feedback_report_{datetime.now().strftime('%Y%m%d')}.csv"}
+        )
+    except Exception as e:
+        logger.error(f"Error generating feedback report: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/admin/reports/revenue")
+async def download_revenue_report(
+    current_user: dict = Depends(require_role([UserRole.PLATFORM_MANAGER]))
+):
+    """Download revenue insights report as CSV"""
+    try:
+        from fastapi.responses import StreamingResponse
+        import io
+        import csv
+        
+        payments = supabase.table('payment_requests').select('*, advocates(*, users(*)), users(*)').order('created_at', desc=True).execute().data
+        
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['Payment ID', 'Advocate Name', 'Client Name', 'Amount (INR)', 'Status', 'Payment Date', 'Case ID'])
+        
+        total_revenue = 0
+        
+        for payment in payments:
+            advocate_data = payment.get('advocates', {})
+            advocate_user = advocate_data.get('users', {}) if advocate_data else {}
+            client = payment.get('users', {})
+            amount = payment.get('amount', 0)
+            
+            if payment.get('status') == 'paid':
+                total_revenue += amount
+            
+            writer.writerow([
+                payment.get('id', '')[:8],
+                advocate_user.get('full_name', 'N/A'),
+                client.get('full_name', 'N/A'),
+                amount,
+                payment.get('status', ''),
+                payment.get('created_at', '')[:10],
+                payment.get('case_id', '')[:8] if payment.get('case_id') else 'N/A'
+            ])
+        
+        writer.writerow([])
+        writer.writerow(['TOTAL REVENUE', '', '', total_revenue, '', '', ''])
+        output.seek(0)
+        
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=revenue_report_{datetime.now().strftime('%Y%m%d')}.csv"}
+        )
+    except Exception as e:
+        logger.error(f"Error generating revenue report: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # ============= VOICE AI ENDPOINTS =============
 # from admin_models import AdminLog, AdminLogResponse, AdminStats, PlatformStats, NotificationResponse
 from voice_models import (

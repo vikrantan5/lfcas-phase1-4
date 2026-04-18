@@ -150,15 +150,12 @@ async def create_user_with_auth(email: str, password: str, full_name: str, phone
                         print(f"✅ User created via sign_up: {email}")
 
 
-                         # CRITICAL FIX: Manually confirm the user's email using admin API
-                        # This bypasses the email confirmation requirement
-                        try:
-                            supabase.auth.admin.update_user_by_id(
-                                auth_user.id,
-                                {"email_confirm": True}
-                            )
-                            print(f"✅ Email auto-confirmed for: {email}")
-                        except Exception as confirm_error:
+                             # NOTE: Email confirmation will be required unless disabled in Supabase settings
+                        # Since admin API is not available, we cannot auto-confirm
+                        # User should check Supabase settings: Authentication > Email Auth > Confirm email = disabled
+                        # OR enable admin API in Supabase project settings
+                        print(f"ℹ️  User created successfully. Email confirmation may be required based on Supabase settings.")
+                except Exception as confirm_error:
                             print(f"⚠️  Email confirmation failed (user can still login if auto-confirm is enabled): {confirm_error}")
                 except Exception as signup_error:
                     signup_error_str = str(signup_error).lower()

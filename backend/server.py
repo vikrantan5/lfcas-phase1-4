@@ -1892,6 +1892,52 @@ async def get_payment_settings(
         raise HTTPException(status_code=500, detail=f"Failed to fetch payment settings: {str(e)}")
 
 
+
+
+
+
+@api_router.get("/payments/advocate-key/{advocate_id}")
+async def get_advocate_razorpay_key(advocate_id: str):
+    """
+    Get advocate's Razorpay key for client payment processing
+    This endpoint is called by clients when they need to pay
+    """
+    try:
+        logger.info(f"Fetching Razorpay key for advocate: {advocate_id}")
+        
+        # Query advocate_payment_settings table
+        result = supabase.table('advocate_payment_settings').select('razorpay_key_id').eq('advocate_id', advocate_id).execute()
+        
+        if not result.data or len(result.data) == 0:
+            logger.warning(f"No payment settings found for advocate: {advocate_id}")
+            raise HTTPException(
+                status_code=404, 
+                detail="Advocate payment key not found. The advocate may not have configured their payment settings yet."
+            )
+        
+        razorpay_key_id = result.data[0].get('razorpay_key_id')
+        
+        if not razorpay_key_id:
+            logger.error(f"Razorpay key_id is empty for advocate: {advocate_id}")
+            raise HTTPException(
+                status_code=404,
+                detail="Advocate payment key not configured"
+            )
+        
+        logger.info(f"Successfully retrieved Razorpay key for advocate: {advocate_id}")
+        return {
+            "razorpay_key_id": razorpay_key_id
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching advocate Razorpay key: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to fetch advocate payment key: {str(e)}"
+        )
+
 @api_router.post("/payments/request", response_model=PaymentRequestResponse)
 async def create_payment_request(
     request_data: PaymentRequestCreate,

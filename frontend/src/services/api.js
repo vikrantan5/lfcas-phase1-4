@@ -77,6 +77,7 @@ export const caseAPI = {
     create: (data) => api.post('/cases/draft', data),
   updateStage: (id, data) => api.patch(`/cases/${id}/stage`, data),
   getStageHistory: (id) => api.get(`/cases/${id}/stage-history`),
+   getAIInsights: (id, forceRegenerate = false) => api.get(`/cases/${id}/ai-insights`, { params: { force_regenerate: forceRegenerate } }),
 };
 
 

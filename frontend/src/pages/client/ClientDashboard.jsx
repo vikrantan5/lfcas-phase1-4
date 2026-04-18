@@ -34,14 +34,7 @@ import SettingsPage from './Settings';
 
 import PaymentsPage from './Payments';
 import { getAvatarUrl, handleAvatarError } from '../../lib/utils';
-// ============ MOCK DATA ============
-const mockCaseTimeline = [
-  { stage: 'Petition Filed', status: 'completed', date: '10 Jan 2025', icon: 'check' },
-  { stage: 'Court Response', status: 'completed', date: '25 Jan 2025', icon: 'check' },
-  { stage: 'Hearing', status: 'upcoming', date: '20 Apr 2025', icon: 'scale' },
-  { stage: 'Judgment', status: 'pending', date: null, icon: 'gavel' },
-  { stage: 'Closure', status: 'pending', date: null, icon: 'file' },
-];
+
 
 // ============ SIDEBAR COMPONENT ============
 const Sidebar = ({ activeItem, setActiveItem, onStartAI }) => {
@@ -176,6 +169,12 @@ const ClientDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [activeItem, setActiveItem] = useState('dashboard');
 
+   // NEW: State for real data
+  const [caseTimeline, setCaseTimeline] = useState([]);
+  const [timelineLoading, setTimelineLoading] = useState(false);
+  const [aiInsights, setAiInsights] = useState(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
+
   // AI Query State
   const [showAIQuery, setShowAIQuery] = useState(false);
   const [aiQueryData, setAIQueryData] = useState({ case_type: '', description: '', location: '' });
@@ -202,6 +201,19 @@ const ClientDashboard = () => {
     // Check if we should show the bot popup
     checkAndShowBotPopup();
   }, []);
+
+
+    // NEW: Load timeline and insights when primary case changes
+  useEffect(() => {
+    if (cases.length > 0 && cases[0].id) {
+      const primaryCaseId = cases[0].id;
+      loadCaseTimeline(primaryCaseId);
+      loadAIInsights(primaryCaseId);
+    } else {
+      setCaseTimeline([]);
+      setAiInsights(null);
+    }
+  }, [cases]);
 
   const loadAllData = async () => {
     try {
@@ -280,6 +292,109 @@ const ClientDashboard = () => {
     }
   };
 
+
+   // NEW: Load case timeline (stage history)
+  const loadCaseTimeline = async (caseId) => {
+    if (!caseId) {
+      setCaseTimeline([]);
+      return;
+    }
+    
+    try {
+      setTimelineLoading(true);
+      const response = await caseAPI.getStageHistory(caseId);
+      
+      // Map backend stages to timeline format
+      const stageMapping = {
+        'INITIATED': { label: 'Petition Filed', icon: 'check' },
+        'PETITION_FILED': { label: 'Court Response', icon: 'check' },
+        'COURT_REVIEW': { label: 'Court Review', icon: 'check' },
+        'HEARING_SCHEDULED': { label: 'Hearing', icon: 'scale' },
+        'HEARING_DONE': { label: 'Hearing Done', icon: 'check' },
+        'JUDGMENT_PENDING': { label: 'Judgment', icon: 'gavel' },
+        'CLOSED': { label: 'Closure', icon: 'file' }
+      };
+      
+      const allStages = ['INITIATED', 'PETITION_FILED', 'COURT_REVIEW', 'HEARING_SCHEDULED', 'HEARING_DONE', 'JUDGMENT_PENDING', 'CLOSED'];
+      
+      // Create timeline based on stage history
+      const timeline = allStages.map(stage => {
+        const historyEntry = response.data.find(h => h.to_stage === stage);
+        const mapping = stageMapping[stage] || { label: stage, icon: 'file' };
+        
+        if (historyEntry) {
+          return {
+            stage: mapping.label,
+            status: 'completed',
+            date: new Date(historyEntry.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+            icon: mapping.icon
+          };
+        } else {
+          // Check if this is the next upcoming stage
+          const completedStages = response.data.map(h => h.to_stage);
+          const lastCompletedIndex = allStages.findIndex(s => s === completedStages[completedStages.length - 1]);
+          const currentStageIndex = allStages.indexOf(stage);
+          
+          if (currentStageIndex === lastCompletedIndex + 1) {
+            return {
+              stage: mapping.label,
+              status: 'upcoming',
+              date: null,
+              icon: mapping.icon
+            };
+          } else {
+            return {
+              stage: mapping.label,
+              status: 'pending',
+              date: null,
+              icon: mapping.icon
+            };
+          }
+        }
+      });
+      
+      setCaseTimeline(timeline);
+    } catch (error) {
+      console.error('Failed to load case timeline:', error);
+      setCaseTimeline([]);
+    } finally {
+      setTimelineLoading(false);
+    }
+  };
+
+  // NEW: Load AI insights for primary case
+  const loadAIInsights = async (caseId) => {
+    if (!caseId) {
+      setAiInsights(null);
+      return;
+    }
+    
+    try {
+      setInsightsLoading(true);
+      const response = await caseAPI.getAIInsights(caseId);
+      
+      if (response.data.success && response.data.insights) {
+        setAiInsights(response.data.insights);
+      } else {
+        // Fallback to default values
+        setAiInsights({
+          strength: 7.5,
+          duration: "6-12 months",
+          cost: "₹20K - ₹50K"
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load AI insights:', error);
+      // Fallback to default values
+      setAiInsights({
+        strength: 7.5,
+        duration: "6-12 months",
+        cost: "₹20K - ₹50K"
+      });
+    } finally {
+      setInsightsLoading(false);
+    }
+  };
 
   
   const checkAndShowBotPopup = () => {
@@ -400,6 +515,34 @@ const ClientDashboard = () => {
   // Use first case data or mock for display
   const primaryCase = cases.length > 0 ? cases[0] : null;
 
+
+
+    // NEW: Calculate real progress based on case stage
+  const calculateCaseProgress = (currentStage) => {
+    const stageProgressMap = {
+      'INITIATED': 10,
+      'PETITION_FILED': 25,
+      'COURT_REVIEW': 40,
+      'HEARING_SCHEDULED': 55,
+      'HEARING_DONE': 70,
+      'JUDGMENT_PENDING': 85,
+      'CLOSED': 100
+    };
+    return stageProgressMap[currentStage] || 10;
+  };
+
+  // Get real data for primary case
+  const caseProgress = primaryCase ? calculateCaseProgress(primaryCase.current_stage) : 65;
+  const caseNumber = primaryCase ? `LFC${String(primaryCase.id).slice(0, 3).toUpperCase()}` : 'LFC300';
+  const caseTypeDisplay = primaryCase ? formatCaseType(primaryCase.case_type) : 'Divorce';
+  const caseStatus = primaryCase?.current_stage ? primaryCase.current_stage.replace('_', ' ') : 'INITIATED';
+  
+  // Get advocate info from primary case
+  const advocateName = primaryCase?.advocate?.user?.full_name || 'Not Assigned';
+  
+  // Get next hearing info - need to fetch from hearings
+  const nextHearingDisplay = 'Not Scheduled'; // Will be updated with real hearing data
+  const courtDisplay = 'Not Assigned'; // Will be updated with real court data
   return (
     <div className="lfcas-layout" data-testid="client-dashboard">
       <Sidebar activeItem={activeItem} setActiveItem={setActiveItem} onStartAI={() => setShowAIQuery(true)} />
@@ -542,29 +685,37 @@ const ClientDashboard = () => {
                 View Details <ArrowRight size={14} />
               </button>
             </div>
-            <div className="timeline-track">
-              {mockCaseTimeline.map((step, i) => (
-                <div key={i} className={`timeline-step ${step.status}`} data-testid={`timeline-step-${i}`}>
-                  <div className="timeline-icon-wrap">
-                    {step.status === 'completed' ? (
-                      <CheckCircle size={28} />
-                    ) : step.status === 'upcoming' ? (
-                      <Scale size={24} />
-                    ) : (
-                      <div className="timeline-pending-icon">
-                        {step.icon === 'gavel' ? <Gavel size={20} /> : <FileText size={20} />}
-                      </div>
-                    )}
+            {timelineLoading ? (
+              <div className="loading-center"><Loader2 className="animate-spin" size={24} /></div>
+            ) : caseTimeline.length > 0 ? (
+              <div className="timeline-track">
+                {caseTimeline.map((step, i) => (
+                  <div key={i} className={`timeline-step ${step.status}`} data-testid={`timeline-step-${i}`}>
+                    <div className="timeline-icon-wrap">
+                      {step.status === 'completed' ? (
+                        <CheckCircle size={28} />
+                      ) : step.status === 'upcoming' ? (
+                        <Scale size={24} />
+                      ) : (
+                        <div className="timeline-pending-icon">
+                          {step.icon === 'gavel' ? <Gavel size={20} /> : <FileText size={20} />}
+                        </div>
+                      )}
+                    </div>
+                    {i < caseTimeline.length - 1 && <div className={`timeline-connector ${step.status}`} />}
+                    <p className="timeline-label">{step.stage}</p>
+                    <p className="timeline-status">
+                      {step.status === 'completed' ? 'Completed' : step.status === 'upcoming' ? 'Upcoming' : 'Pending'}
+                    </p>
+                    {step.date && <p className="timeline-date">{step.date}</p>}
                   </div>
-                  {i < mockCaseTimeline.length - 1 && <div className={`timeline-connector ${step.status}`} />}
-                  <p className="timeline-label">{step.stage}</p>
-                  <p className="timeline-status">
-                    {step.status === 'completed' ? 'Completed' : step.status === 'upcoming' ? 'Upcoming' : 'Pending'}
-                  </p>
-                  {step.date && <p className="timeline-date">{step.date}</p>}
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-4 text-gray-500">
+                <p>No case timeline available</p>
+              </div>
+            )}
           </div>
 
           {/* --- YOUR CASES OVERVIEW --- */}
@@ -581,36 +732,36 @@ const ClientDashboard = () => {
             </div>
             {loading ? (
               <div className="loading-center"><Loader2 className="animate-spin" size={32} /></div>
-            ) : (
+            ) : primaryCase ? (
               <div className="case-overview-card" data-testid="primary-case-card">
                 <div className="case-card-top">
                   <div className="case-card-left-info">
-                    <span className="case-id">{primaryCase ? `LFC${String(primaryCase.id || '').slice(0, 3).toUpperCase()}` : 'LFC123'}</span>
+                    <span className="case-id">{caseNumber}</span>
                     <h4 className="case-title">
-                      {primaryCase ? formatCaseType(primaryCase.case_type) + ' Case' : 'Divorce Case'}
+                      {caseTypeDisplay} Case
                     </h4>
                     <Badge className="case-status-badge">
                       <Gavel size={12} />
-                      {primaryCase?.current_stage ? primaryCase.current_stage.replace('_', ' ') : 'Hearing Scheduled'}
+                      {caseStatus}
                     </Badge>
                   </div>
                   <div className="case-card-right-progress">
                     <div className="case-illustration">
                       <Gavel size={40} className="gavel-icon" />
                     </div>
-                    <CircularProgress percentage={primaryCase ? 65 : 65} size={90} />
+                    <CircularProgress percentage={caseProgress} size={90} />
                     <span className="progress-label">Progress</span>
                   </div>
                 </div>
                 <div className="case-card-details">
-                  <p><UserCheck size={14} /> <strong>Advocate:</strong> {primaryCase?.advocate?.user?.full_name || 'Rahul Sharma'}</p>
-                  <p><Clock size={14} /> <strong>Next Hearing:</strong> 20 Apr, 10:00 AM</p>
-                  <p><MapPin size={14} /> <strong>Court:</strong> Family Court, Delhi</p>
+                  <p><UserCheck size={14} /> <strong>Advocate:</strong> {advocateName}</p>
+                  <p><Clock size={14} /> <strong>Next Hearing:</strong> {nextHearingDisplay}</p>
+                  <p><MapPin size={14} /> <strong>Court:</strong> {courtDisplay}</p>
                 </div>
                 <div className="case-card-actions">
                   <Button
                     className="btn-open-dashboard"
-                    onClick={() => primaryCase && navigate(`/client/cases/${primaryCase.id}`)}
+                    onClick={() => navigate(`/client/cases/${primaryCase.id}`)}
                     data-testid="open-case-dashboard-btn"
                   >
                     Open Dashboard
@@ -619,6 +770,18 @@ const ClientDashboard = () => {
                     <Download size={14} /> Download Summary <ChevronDown size={14} />
                   </Button>
                 </div>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <p>No cases found</p>
+                <Button 
+                  onClick={() => setShowAIQuery(true)} 
+                  className="mt-4"
+                  data-testid="start-new-case-btn"
+                >
+                  <Plus size={16} className="mr-2" />
+                  Start New Case
+                </Button>
               </div>
             )}
           </div>
@@ -731,31 +894,56 @@ const ClientDashboard = () => {
                 <div className="insights-icon-wrap"><Sparkles size={20} /></div>
                 <h3 className="insights-title">Legal Insights for You</h3>
               </div>
-              <div className="insights-metrics">
-                <div className="insight-metric" data-testid="insight-case-strength">
-                  <div className="metric-icon purple"><Scale size={16} /></div>
-                  <div className="metric-info">
-                    <span className="metric-label">Case Strength</span>
-                    <div className="metric-bar-wrap">
-                      <div className="metric-bar" style={{ width: `${(dashboardSummary.case_score || 7.5) * 10}%` }} />
+              {insightsLoading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="animate-spin" size={32} />
+                </div>
+              ) : aiInsights ? (
+                <>
+                  <div className="insights-metrics">
+                    <div className="insight-metric" data-testid="insight-case-strength">
+                      <div className="metric-icon purple"><Scale size={16} /></div>
+                      <div className="metric-info">
+                        <span className="metric-label">Case Strength</span>
+                        <div className="metric-bar-wrap">
+                          <div className="metric-bar" style={{ width: `${(aiInsights.strength || 7.5) * 10}%` }} />
+                        </div>
+                      </div>
+                      <span className="metric-value">{(aiInsights.strength || 7.5).toFixed(1)}/10</span>
+                    </div>
+                    <div className="insight-metric" data-testid="insight-duration">
+                      <div className="metric-icon blue"><Clock size={16} /></div>
+                      <span className="metric-label">Est. Duration</span>
+                      <span className="metric-value">{aiInsights.duration || '6-12 Months'}</span>
+                    </div>
+                    <div className="insight-metric" data-testid="insight-cost">
+                      <div className="metric-icon orange"><AlertCircle size={16} /></div>
+                      <span className="metric-label">Cost Range</span>
+                      <span className="metric-value">{aiInsights.cost || '₹20K - ₹50K'}</span>
                     </div>
                   </div>
-                  <span className="metric-value">{(dashboardSummary.case_score || 7.5).toFixed(1)}/10</span>
+                  <button 
+                    className="insights-cta" 
+                    data-testid="get-detailed-analysis-btn"
+                    onClick={() => primaryCase && navigate(`/client/cases/${primaryCase.id}`)}
+                  >
+                    Get Detailed Analysis <ArrowRight size={14} />
+                  </button>
+                </>
+              ) : (
+                <div className="text-center py-4 text-gray-500">
+                  <p>No insights available</p>
+                  {primaryCase && (
+                    <Button 
+                      onClick={() => loadAIInsights(primaryCase.id)} 
+                      className="mt-3"
+                      size="sm"
+                    >
+                      Generate Insights
+                    </Button>
+                  )}
                 </div>
-                <div className="insight-metric" data-testid="insight-duration">
-                  <div className="metric-icon blue"><Clock size={16} /></div>
-                  <span className="metric-label">Est. Duration</span>
-                  <span className="metric-value">6-12 Months</span>
-                </div>
-                <div className="insight-metric" data-testid="insight-cost">
-                  <div className="metric-icon orange"><AlertCircle size={16} /></div>
-                  <span className="metric-label">Cost Range</span>
-                  <span className="metric-value">₹20K - ₹50K</span>
-                </div>
-              </div>
-              <button className="insights-cta" data-testid="get-detailed-analysis-btn">
-                Get Detailed Analysis <ArrowRight size={14} />
-              </button>
+              )}
             </div>
           </div>
         </div>

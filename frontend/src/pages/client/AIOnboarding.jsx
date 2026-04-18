@@ -43,8 +43,8 @@ const AIOnboarding = () => {
     reset
   } = useVoice();
 
-  // State
-  const [step, setStep] = useState('intro'); // 'intro', 'language', 'conversation', 'caseDraft'
+ // State - Start directly at language selection (skip intro since it shows in dashboard popup)
+  const [step, setStep] = useState('language'); // 'intro', 'language', 'conversation', 'caseDraft'
   const [showTextInput, setShowTextInput] = useState(false);
   const [textInput, setTextInput] = useState('');
   const [caseDraft, setCaseDraft] = useState(null);

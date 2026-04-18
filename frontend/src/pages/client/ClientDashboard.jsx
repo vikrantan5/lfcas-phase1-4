@@ -14,7 +14,7 @@ import {
   Calendar, AlertCircle, UserCheck, Star, Sparkles, ArrowRight, ChevronRight, Zap,
   Home, Bot, FolderOpen, ClipboardCheck, Bell, Search, UserPlus, MessageSquare,
   Download, BookOpen, Settings, Crown, Send, Upload, FileDown, ChevronDown,
- MapPin, Gavel, Eye, CreditCard
+ MapPin, Gavel, Eye, CreditCard, Mic
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../hooks/use-toast';
@@ -193,7 +193,15 @@ const ClientDashboard = () => {
   const [showRatingDialog, setShowRatingDialog] = useState(false);
   const [selectedCaseForRating, setSelectedCaseForRating] = useState(null);
 
-  useEffect(() => { loadAllData(); }, []);
+ // Auto Bot Popup State
+  const [showBotPopup, setShowBotPopup] = useState(false);
+
+  useEffect(() => { 
+    loadAllData(); 
+    
+    // Check if we should show the bot popup
+    checkAndShowBotPopup();
+  }, []);
 
   const loadAllData = async () => {
     try {
@@ -270,6 +278,38 @@ const ClientDashboard = () => {
       console.error('Failed to load recommended advocates:', error);
       setDynamicRecommendedAdvocates([]);
     }
+  };
+
+
+  
+  const checkAndShowBotPopup = () => {
+    try {
+      // Check if bot was skipped today
+      const botSkippedDate = localStorage.getItem('botSkippedDate');
+      const today = new Date().toDateString();
+
+      // If bot was not skipped today, show the bot popup
+      if (botSkippedDate !== today) {
+        // Show bot popup after a short delay for better UX
+        setTimeout(() => {
+          setShowBotPopup(true);
+        }, 1000);
+      }
+    } catch (error) {
+      console.error('Error checking bot popup:', error);
+    }
+  };
+
+  const handleCloseBotPopup = () => {
+    // Store today's date to prevent showing again today
+    localStorage.setItem('botSkippedDate', new Date().toDateString());
+    setShowBotPopup(false);
+  };
+
+  const handleStartBotConversation = () => {
+    // Close the popup and navigate to AI onboarding
+    setShowBotPopup(false);
+    navigate('/client/ai-onboarding');
   };
 
   const handleAIAnalyze = async (e) => {
@@ -874,6 +914,79 @@ const ClientDashboard = () => {
           onSuccess={handleRatingSuccess}
         />
       )}
+
+       {/* Auto Bot Popup Dialog */}
+      <Dialog open={showBotPopup} onOpenChange={setShowBotPopup}>
+        <DialogContent className="max-w-2xl bg-gradient-to-br from-purple-50 via-white to-blue-50 border-purple-200 rounded-3xl" data-testid="bot-popup-dialog">
+          <DialogHeader>
+            <div className="flex flex-col items-center text-center mb-4">
+              {/* AI Robot Icon */}
+              <div className="relative mb-4">
+                <div className="w-24 h-24 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center shadow-xl">
+                  <Bot size={48} className="text-white" />
+                </div>
+                <div className="absolute -top-2 -right-2 w-10 h-10 bg-yellow-400 rounded-full flex items-center justify-center">
+                  <Sparkles size={20} className="text-white" />
+                </div>
+              </div>
+              <DialogTitle className="text-3xl font-bold text-gray-900">
+                Welcome to Your AI Legal Assistant
+              </DialogTitle>
+              <DialogDescription className="text-lg text-gray-600 mt-3 leading-relaxed">
+                I can help you understand your legal problem and guide you step-by-step.
+                Let's have a conversation about your case.
+              </DialogDescription>
+            </div>
+          </DialogHeader>
+
+          {/* Features Grid */}
+          <div className="grid grid-cols-3 gap-4 my-6">
+            <div className="bg-purple-50 rounded-xl p-4 text-center">
+              <div className="w-12 h-12 bg-purple-500 rounded-full flex items-center justify-center mx-auto mb-3">
+                <Mic size={24} className="text-white" />
+              </div>
+              <h4 className="font-semibold text-gray-900 mb-1">Voice Enabled</h4>
+              <p className="text-sm text-gray-600">Speak naturally in multiple languages</p>
+            </div>
+            <div className="bg-blue-50 rounded-xl p-4 text-center">
+              <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center mx-auto mb-3">
+                <Bot size={24} className="text-white" />
+              </div>
+              <h4 className="font-semibold text-gray-900 mb-1">AI Analysis</h4>
+              <p className="text-sm text-gray-600">Get instant legal insights</p>
+            </div>
+            <div className="bg-green-50 rounded-xl p-4 text-center">
+              <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-3">
+                <FileText size={24} className="text-white" />
+              </div>
+              <h4 className="font-semibold text-gray-900 mb-1">Case Ready</h4>
+              <p className="text-sm text-gray-600">Prepared automatically</p>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex flex-col sm:flex-row gap-4 mt-6">
+            <Button
+              size="lg"
+              onClick={handleStartBotConversation}
+              className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-lg py-6"
+              data-testid="bot-popup-start-btn"
+            >
+              <Sparkles className="mr-2" size={20} />
+              Start Conversation
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              onClick={handleCloseBotPopup}
+              className="flex-1 text-lg py-6"
+              data-testid="bot-popup-skip-btn"
+            >
+              Skip for Now
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -56,7 +56,7 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
 
 
 
-// Client Route with Onboarding Check
+// Client Route - No onboarding check needed since we show bot as popup
 const ClientRouteWithOnboarding = ({ children }) => {
   const { user, loading } = useAuth();
 
@@ -68,14 +68,9 @@ const ClientRouteWithOnboarding = ({ children }) => {
     );
   }
 
-  // If client hasn't completed onboarding, redirect to AI onboarding
-  if (user && user.role === 'client' && !user.has_completed_onboarding) {
-    return <Navigate to="/client/ai-onboarding" replace />;
-  }
-
+  // No redirect needed - bot will show as popup in dashboard
   return children;
 };
-
 
 // Home redirect based on authentication
 const Home = () => {
@@ -92,10 +87,7 @@ const Home = () => {
   // If user is logged in, redirect to their dashboard
   if (user) {
     if (user.role === 'client') {
-       // Check if client has completed onboarding
-      if (!user.has_completed_onboarding) {
-        return <Navigate to="/client/ai-onboarding" replace />;
-      }
+      // Bot will show as popup in dashboard, no redirect needed
       return <Navigate to="/client/dashboard" replace />;
     } else if (user.role === 'advocate') {
       return <Navigate to="/advocate/dashboard" replace />;

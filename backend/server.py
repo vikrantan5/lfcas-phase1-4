@@ -1800,6 +1800,20 @@ async def create_rating(
     if not result.data or len(result.data) == 0:
         raise HTTPException(status_code=500, detail="Failed to create rating")
     
+     # Create notification for advocate about new rating
+    try:
+        notification = {
+            "user_id": rating_data.advocate_id,
+            "notification_type": NotificationType.SYSTEM,
+            "title": "New Rating Received",
+            "message": f"You received a new rating of {rating_data.rating}/5.0 stars from a client",
+            "related_id": result.data[0]['id']
+        }
+        supabase.table('notifications').insert(notification).execute()
+    except Exception as e:
+        logger.warning(f"Failed to create rating notification: {str(e)}")
+    
+    
     return Rating(**result.data[0])
 
 

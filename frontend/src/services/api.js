@@ -157,6 +157,17 @@ export const adminAPI = {
   downloadCasesReport: () => api.get('/admin/reports/cases', { responseType: 'blob' }),
   downloadFeedbackReport: () => api.get('/admin/reports/feedback', { responseType: 'blob' }),
   downloadRevenueReport: () => api.get('/admin/reports/revenue', { responseType: 'blob' }),
+
+   // Warnings
+  createWarning: (advocateId, severity, reason, description) => 
+    api.post('/admin/warnings', null, { 
+      params: { advocate_id: advocateId, severity, reason, description } 
+    }),
+  getWarnings: (params) => api.get('/admin/warnings', { params }),
+  
+  // View all advocates with ratings
+  getAllAdvocates: (params) => api.get('/admin/advocates', { params }),
+  getAdvocateDetails: (advocateId) => api.get(`/admin/advocates/${advocateId}/details`),
 };
 
 

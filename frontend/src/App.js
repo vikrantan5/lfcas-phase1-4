@@ -24,6 +24,7 @@ import Messages from './pages/advocate/Messages';
 import FindClients from './pages/advocate/FindClients';
 import Settings from './pages/advocate/Settings';
 import ManagerDashboard from './pages/manager/ManagerDashboard';
+import AllAdvocatesPage from './pages/manager/AllAdvocates';
 import VoiceAssistantButton from './components/VoiceAssistantButton';
 import VoiceAssistantModal from './components/VoiceAssistantModal';
 import { Loader2 } from 'lucide-react';
@@ -256,6 +257,14 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={['platform_manager']}>
                     <ManagerDashboard />
+                  </ProtectedRoute>
+                }
+              />
+                <Route
+                path="/manager/advocates"
+                element={
+                  <ProtectedRoute allowedRoles={['platform_manager']}>
+                    <AllAdvocatesPage />
                   </ProtectedRoute>
                 }
               />

@@ -2723,8 +2723,16 @@ async def get_platform_stats(
     # Sort activity log by timestamp
     activity_log.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
     
+    
     # Upcoming hearings for alerts
     upcoming_hearings = supabase.table('hearings').select('*, cases(*)').gte('hearing_date', datetime.now(timezone.utc).isoformat()).eq('is_completed', False).order('hearing_date').limit(5).execute().data
+    
+    # Warnings stats
+    total_warnings = supabase.table('warnings').select('*', count='exact').execute().count or 0
+    critical_warnings = supabase.table('warnings').select('*', count='exact').eq('severity', 'critical').execute().count or 0
+    
+    # Ratings stats
+    total_ratings = supabase.table('ratings').select('*', count='exact').execute().count or 0
     
     return {
         "users": {
@@ -2762,6 +2770,13 @@ async def get_platform_stats(
         "meetings": {
             "total": total_meetings
         },
+        "warnings": {
+            "total": total_warnings,
+            "critical": critical_warnings
+        },
+        "ratings": {
+            "total": total_ratings
+        },
         "activity_log": activity_log,
         "recent_cases": recent_cases,
         "recent_meetings": recent_meetings
@@ -2782,6 +2797,202 @@ async def get_admin_logs(
 
 
 
+
+# ============= ADMIN - WARNINGS ENDPOINTS =============
+@api_router.post("/admin/warnings")
+async def create_warning(
+    advocate_id: str = Query(...),
+    severity: str = Query(...),
+    reason: str = Query(...),
+    description: Optional[str] = Query(None),
+    current_user: dict = Depends(require_role([UserRole.PLATFORM_MANAGER]))
+):
+    """Admin creates a warning for an advocate"""
+    try:
+        # Verify advocate exists
+        advocate = supabase.table('advocates').select('*, users(*)').eq('id', advocate_id).execute()
+        if not advocate.data or len(advocate.data) == 0:
+            raise HTTPException(status_code=404, detail="Advocate not found")
+        
+        advocate_data = advocate.data[0]
+        
+        # Create warning
+        warning = {
+            "advocate_id": advocate_id,
+            "issued_by": current_user["user_id"],
+            "severity": severity,
+            "reason": reason,
+            "description": description
+        }
+        
+        result = supabase.table('warnings').insert(warning).execute()
+        
+        if not result.data or len(result.data) == 0:
+            raise HTTPException(status_code=500, detail="Failed to create warning")
+        
+       
+        
+        # Create notification for advocate
+        notification = {
+            "user_id": advocate_data["user_id"],
+            "notification_type": NotificationType.SYSTEM,
+            "title": f"Warning Issued - {severity.upper()}",
+            "message": f"Admin has issued a {severity} warning: {reason}",
+            "related_id": result.data[0]['id']
+        }
+        supabase.table('notifications').insert(notification).execute()
+        
+        # Log admin action
+        admin_log = {
+            "admin_id": current_user["user_id"],
+            "action": "issue_warning",
+            "target_type": "advocate",
+            "target_id": advocate_id,
+            "details": {"severity": severity, "reason": reason}
+        }
+        supabase.table('admin_logs').insert(admin_log).execute()
+        
+        return {
+            "message": "Warning issued successfully",
+            "warning": result.data[0]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating warning: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/admin/warnings")
+async def get_all_warnings(
+    advocate_id: Optional[str] = Query(None),
+    severity: Optional[str] = Query(None),
+    current_user: dict = Depends(require_role([UserRole.PLATFORM_MANAGER]))
+):
+    """Get all warnings with filters"""
+    try:
+        query = supabase.table('warnings').select('*, advocates!warnings_advocate_id_fkey(*, users(*)), issued_by_user:users!warnings_issued_by_fkey(*)')
+        
+        if advocate_id:
+            query = query.eq('advocate_id', advocate_id)
+        if severity:
+            query = query.eq('severity', severity)
+        
+        result = query.order('created_at', desc=True).execute()
+        
+        return {"warnings": result.data}
+        
+    except Exception as e:
+        logger.error(f"Error fetching warnings: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============= ADMIN - VIEW ALL ADVOCATES WITH RATINGS =============
+@api_router.get("/admin/advocates")
+async def get_all_advocates_with_ratings(
+    status: Optional[str] = Query(None),
+    location: Optional[str] = Query(None),
+    min_rating: Optional[float] = Query(None),
+    current_user: dict = Depends(require_role([UserRole.PLATFORM_MANAGER]))
+):
+    """Get all advocates with ratings, warnings, and case statistics"""
+    try:
+        query = supabase.table('advocates').select('*, users(*)')
+        
+        if status:
+            query = query.eq('status', status)
+        if location:
+            query = query.ilike('location', f'%{location}%')
+        if min_rating:
+            query = query.gte('rating', min_rating)
+        
+        result = query.order('created_at', desc=True).execute()
+        
+        advocates_with_details = []
+        
+        for advocate in result.data:
+            # Get warning count
+            warnings = supabase.table('warnings').select('*', count='exact').eq('advocate_id', advocate['id']).execute()
+            warning_count = warnings.count or 0
+            
+            # Get ratings
+            ratings = supabase.table('ratings').select('*').eq('advocate_id', advocate['id']).execute()
+            ratings_list = ratings.data if ratings.data else []
+            
+            # Calculate average rating
+            if ratings_list:
+                avg_rating = sum(r['rating'] for r in ratings_list) / len(ratings_list)
+                rating_count = len(ratings_list)
+            else:
+                avg_rating = advocate.get('rating', 0)
+                rating_count = 0
+            
+            advocate_detail = {
+                **advocate,
+                "warning_count": warning_count,
+                "rating": avg_rating,
+                "rating_count": rating_count,
+                "recent_ratings": ratings_list[:5]  # Last 5 ratings
+            }
+            
+            advocates_with_details.append(advocate_detail)
+        
+        return {
+            "advocates": advocates_with_details,
+            "total": len(advocates_with_details)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching advocates: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/admin/advocates/{advocate_id}/details")
+async def get_advocate_details(
+    advocate_id: str,
+    current_user: dict = Depends(require_role([UserRole.PLATFORM_MANAGER]))
+):
+    """Get detailed information about a specific advocate including ratings and warnings"""
+    try:
+        # Get advocate
+        advocate = supabase.table('advocates').select('*, users(*)').eq('id', advocate_id).execute()
+        if not advocate.data or len(advocate.data) == 0:
+            raise HTTPException(status_code=404, detail="Advocate not found")
+        
+        advocate_data = advocate.data[0]
+        
+        # Get warnings
+        warnings = supabase.table('warnings').select('*, issued_by_user:users!warnings_issued_by_fkey(*)').eq('advocate_id', advocate_id).order('created_at', desc=True).execute()
+        
+        # Get ratings with client details
+        ratings = supabase.table('ratings').select('*, client:users!ratings_client_id_fkey(*), case:cases!ratings_case_id_fkey(*)').eq('advocate_id', advocate_id).order('created_at', desc=True).execute()
+        
+        # Get cases
+        cases = supabase.table('cases').select('*', count='exact').eq('advocate_id', advocate_id).execute()
+        total_cases = cases.count or 0
+        
+        active_cases = supabase.table('cases').select('*', count='exact').eq('advocate_id', advocate_id).neq('current_stage', 'CLOSED').execute()
+        active_cases_count = active_cases.count or 0
+        
+        return {
+            "advocate": advocate_data,
+            "warnings": warnings.data if warnings.data else [],
+            "ratings": ratings.data if ratings.data else [],
+            "statistics": {
+                "total_cases": total_cases,
+                "active_cases": active_cases_count,
+                "warning_count": len(warnings.data) if warnings.data else 0,
+                "rating_count": len(ratings.data) if ratings.data else 0,
+                "average_rating": advocate_data.get('rating', 0)
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching advocate details: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 

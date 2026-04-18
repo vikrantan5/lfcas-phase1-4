@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Scale, Loader2, X, Check, AlertCircle, Calendar } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../hooks/use-toast';
+import { formatError } from '../../lib/errorFormatter';
 
 // Premium Dashboard Components
 import Sidebar from '../../components/advocate/Sidebar';
@@ -142,13 +143,27 @@ const AdvocateDashboard = () => {
     e.preventDefault();
     setCreatingProfile(true);
     try {
-      await advocateAPI.createProfile(profileData);
+      // Fix: Send specializations (plural) instead of specialization
+      const payload = {
+        bar_council_id: profileData.bar_council_id,
+        specializations: profileData.specialization,
+        experience_years: parseInt(profileData.experience_years) || 0,
+        location: profileData.location,
+        bio: profileData.bio || null
+      };
+      
+      await advocateAPI.createProfile(payload);
       toast({ title: "Profile Created", description: "Your advocate profile has been submitted for approval." });
       setShowProfileSetup(false);
       loadData();
     } catch (error) {
       console.error('Profile creation failed:', error);
-      toast({ title: "Profile Creation Failed", description: error.response?.data?.detail || "Failed to create profile.", variant: "destructive" });
+      const errorMessage = formatError(error);
+      toast({ 
+        title: "Profile Creation Failed", 
+        description: errorMessage, 
+        variant: "destructive" 
+      });
     } finally {
       setCreatingProfile(false);
     }

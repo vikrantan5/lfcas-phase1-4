@@ -6,7 +6,8 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
-import { FileText, Upload, Download, Eye, Trash2, Filter, Search, Clock, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Textarea } from '../../components/ui/textarea';
+import { FileText, Upload, Download, Eye, Trash2, Filter, Search, Clock, CheckCircle, AlertCircle, Loader2, Edit } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
 
 const Documents = () => {
@@ -26,6 +27,12 @@ const Documents = () => {
   });
   const [filterType, setFilterType] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+    // Edit request states
+  const [showEditRequestDialog, setShowEditRequestDialog] = useState(false);
+  const [selectedDocument, setSelectedDocument] = useState(null);
+  const [editRequestReason, setEditRequestReason] = useState('');
+  const [requestingEdit, setRequestingEdit] = useState(false);
 
   useEffect(() => {
     loadCases();
@@ -115,6 +122,41 @@ const Documents = () => {
     return new Date(dateString).toLocaleDateString('en-IN', {
       year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
     });
+  };
+
+    const handleRequestEdit = async (doc) => {
+    setSelectedDocument(doc);
+    setShowEditRequestDialog(true);
+  };
+
+  const submitEditRequest = async (e) => {
+    e.preventDefault();
+    if (!editRequestReason.trim()) {
+      toast({ title: "Error", description: "Please provide a reason for editing", variant: "destructive" });
+      return;
+    }
+
+    setRequestingEdit(true);
+    try {
+      await documentAPI.createEditRequest({
+        document_id: selectedDocument.id,
+        reason: editRequestReason
+      });
+
+      toast({ title: "Success", description: "Edit request sent to advocate" });
+      setShowEditRequestDialog(false);
+      setEditRequestReason('');
+      setSelectedDocument(null);
+      loadDocuments(selectedCase);
+    } catch (error) {
+      toast({ 
+        title: "Request Failed", 
+        description: error.response?.data?.detail || "Failed to send edit request", 
+        variant: "destructive" 
+      });
+    } finally {
+      setRequestingEdit(false);
+    }
   };
 
   return (
@@ -254,8 +296,18 @@ const Documents = () => {
                     link.download = doc.document_name;
                     link.click();
                   }}
+    data-testid={`download-document-${doc.id}`}
                 >
                   <Download size={14} />
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  className="border-violet-200 text-violet-700 hover:bg-violet-50"
+                  onClick={() => handleRequestEdit(doc)}
+                  data-testid={`request-edit-${doc.id}`}
+                >
+                  <Edit size={14} />
                 </Button>
               </div>
             </Card>
@@ -326,6 +378,66 @@ const Documents = () => {
               </Button>
               <Button type="submit" disabled={uploading} className="flex-1 bg-violet-600 hover:bg-violet-700">
                 {uploading ? "Uploading..." : "Upload"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+       {/* Edit Request Dialog */}
+      <Dialog open={showEditRequestDialog} onOpenChange={setShowEditRequestDialog}>
+        <DialogContent className="max-w-md" data-testid="edit-request-dialog">
+          <DialogHeader>
+            <DialogTitle>Request Document Edit Permission</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={submitEditRequest} className="space-y-4">
+            <div className="bg-slate-50 p-4 rounded">
+              <p className="text-sm font-semibold text-slate-700 mb-1">Document:</p>
+              <p className="text-slate-900">{selectedDocument?.document_name}</p>
+            </div>
+
+            <div>
+              <Label>Reason for Edit Request *</Label>
+              <Textarea
+                value={editRequestReason}
+                onChange={(e) => setEditRequestReason(e.target.value)}
+                placeholder="Please explain why you need to edit this document..."
+                rows={4}
+                required
+                data-testid="edit-request-reason"
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Your advocate will review and approve your request
+              </p>
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => {
+                  setShowEditRequestDialog(false);
+                  setEditRequestReason('');
+                  setSelectedDocument(null);
+                }} 
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button 
+                type="submit" 
+                disabled={requestingEdit} 
+                className="flex-1 bg-violet-600 hover:bg-violet-700"
+                data-testid="submit-edit-request"
+              >
+                {requestingEdit ? (
+                  <>
+                    <Loader2 className="animate-spin mr-2" size={16} />
+                    Sending...
+                  </>
+                ) : (
+                  "Send Request"
+                )}
               </Button>
             </div>
           </form>

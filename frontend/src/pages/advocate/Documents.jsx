@@ -294,7 +294,7 @@ const Documents = () => {
     <div className="advocate-dashboard">
       <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
       
-      <div className="main-content">
+     <div className="adv-main">
         <DashboardHeader setSidebarOpen={setSidebarOpen} />
 
         <div className="p-6">

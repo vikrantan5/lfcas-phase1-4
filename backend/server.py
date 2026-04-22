@@ -1331,32 +1331,41 @@ async def create_document_edit_request(
         if existing.data and len(existing.data) > 0:
             raise HTTPException(status_code=400, detail="A pending edit request already exists for this document")
         
+               # IMPORTANT: document_edit_requests.advocate_id references users.id (NOT advocates.id).
+        # Fetch the advocate's auth user_id from the advocates table before inserting.
+        if not case_data.get('advocate_id'):
+            raise HTTPException(status_code=400, detail="Case has no assigned advocate")
+
+        advocate_lookup = supabase.table('advocates').select('user_id').eq('id', case_data['advocate_id']).single().execute()
+        advocate_user_id = advocate_lookup.data.get('user_id') if advocate_lookup.data else None
+
+        if not advocate_user_id:
+            raise HTTPException(status_code=400, detail="Invalid advocate ID (no auth user mapped)")
+
         # Create edit request
         edit_request = {
             "document_id": request_data.document_id,
             "client_id": current_user["user_id"],
-            "advocate_id": case_data['advocate_id'],
+            "advocate_id": advocate_user_id,
             "reason": request_data.reason,
             "status": DocumentEditStatus.PENDING
         }
-        
+
         result = supabase.table('document_edit_requests').insert(edit_request).execute()
         
         if not result.data or len(result.data) == 0:
             raise HTTPException(status_code=500, detail="Failed to create edit request")
         
-        # Notify advocate
-        if case_data.get('advocate_id'):
-            advocate = supabase.table('advocates').select('user_id').eq('id', case_data['advocate_id']).execute()
-            if advocate.data:
-                notification = {
-                    "user_id": advocate.data[0]['user_id'],
-                    "notification_type": NotificationType.DOCUMENT_UPLOADED,
-                    "title": "Document Edit Request",
-                    "message": f"A client has requested permission to edit a document: {doc['document_name']}",
-                    "related_id": result.data[0]['id']
-                }
-                supabase.table('notifications').insert(notification).execute()
+        # Notify advocate (we already have the user_id)
+        if advocate_user_id:
+            notification = {
+                "user_id": advocate_user_id,
+                "notification_type": NotificationType.DOCUMENT_UPLOADED,
+                "title": "Document Edit Request",
+                "message": f"A client has requested permission to edit a document: {doc['document_name']}",
+                "related_id": result.data[0]['id']
+            }
+            supabase.table('notifications').insert(notification).execute()
         
         return DocumentEditRequestResponse(**result.data[0])
         
@@ -1392,14 +1401,8 @@ async def get_advocate_edit_requests(
 ):
     """Get all edit requests for the current advocate"""
     try:
-        # Get advocate profile
-        adv_profile = supabase.table('advocates').select('id').eq('user_id', current_user["user_id"]).execute()
-        if not adv_profile.data or len(adv_profile.data) == 0:
-            return []
-        
-        advocate_id = adv_profile.data[0]['id']
-        
-        query = supabase.table('document_edit_requests').select('*, documents(*), client:users!document_edit_requests_client_id_fkey(*)').eq('advocate_id', advocate_id)
+         # document_edit_requests.advocate_id now references users.id directly
+        query = supabase.table('document_edit_requests').select('*, documents(*), client:users!document_edit_requests_client_id_fkey(*)').eq('advocate_id', current_user["user_id"])
         
         if status:
             query = query.eq('status', status)
@@ -1435,9 +1438,8 @@ async def update_edit_request(
         
         edit_req = req_result.data[0]
         
-        # Verify advocate owns this request
-        adv_profile = supabase.table('advocates').select('id').eq('user_id', current_user["user_id"]).execute()
-        if not adv_profile.data or adv_profile.data[0]['id'] != edit_req['advocate_id']:
+        # Verify advocate owns this request (advocate_id stores users.id)
+        if edit_req['advocate_id'] != current_user["user_id"]:
             raise HTTPException(status_code=403, detail="Access denied")
         
         # Update request
@@ -2773,6 +2775,26 @@ async def get_platform_stats(
     
     # Ratings stats
     total_ratings = supabase.table('ratings').select('*', count='exact').execute().count or 0
+
+       # Recent ratings (with client name & advocate info) for admin visibility
+    recent_ratings = []
+    try:
+        rr_res = supabase.table('ratings').select('*, client:users!ratings_client_id_fkey(full_name), advocate:advocates!ratings_advocate_id_fkey(users(full_name))').order('created_at', desc=True).limit(10).execute()
+        for r in (rr_res.data or []):
+            client_name = (r.get('client') or {}).get('full_name') if r.get('client') else None
+            adv = (r.get('advocate') or {})
+            adv_user = (adv.get('users') or {}) if isinstance(adv, dict) else {}
+            advocate_name = adv_user.get('full_name') if isinstance(adv_user, dict) else None
+            recent_ratings.append({
+                "id": r.get('id'),
+                "rating": r.get('rating'),
+                "review": r.get('review'),
+                "client_name": client_name,
+                "advocate_name": advocate_name,
+                "created_at": r.get('created_at')
+            })
+    except Exception as e:
+        logger.error(f"recent_ratings fetch failed: {e}")
     
     return {
         "users": {
@@ -2815,7 +2837,8 @@ async def get_platform_stats(
             "critical": critical_warnings
         },
         "ratings": {
-            "total": total_ratings
+            "total": total_ratings,
+            "recent": recent_ratings
         },
         "activity_log": activity_log,
         "recent_cases": recent_cases,

@@ -22,6 +22,7 @@ import {
   Calendar
 } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
+import { useNavigate } from 'react-router-dom';
 import {
   Dialog,
   DialogContent,
@@ -34,6 +35,7 @@ import {
 const NewAdminDashboard = () => {
   const { user, logout } = useAuth();
   const { toast } = useToast();
+    const navigate = useNavigate();
   
   const [stats, setStats] = useState(null);
   const [timelineData, setTimelineData] = useState(null);
@@ -237,6 +239,16 @@ const NewAdminDashboard = () => {
 
               {/* User Profile */}
               <div className="flex items-center space-x-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                                   onClick={() => navigate('/manager/advocates')}
+                  className="bg-white text-[#3B4FAE] border-white hover:bg-gray-100"
+                  data-testid="view-all-advocates-btn"
+                >
+                  <User className="w-4 h-4 mr-2" />
+                  View All Advocates
+                </Button>
                 <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">
                   <User className="w-5 h-5 text-[#3B4FAE]" />
                 </div>
@@ -385,6 +397,42 @@ const NewAdminDashboard = () => {
                     ))
                   ) : (
                     <p className="text-center text-gray-500 py-4">No pending applications</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+
+                        {/* Recent Client Ratings */}
+            <Card className="shadow-md" data-testid="recent-ratings-card">
+              <CardHeader>
+                <CardTitle className="text-[#3B4FAE] text-lg flex items-center space-x-2">
+                  <MessageSquare className="w-5 h-5" />
+                  <span>Recent Client Ratings</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {stats?.ratings?.recent && stats.ratings.recent.length > 0 ? (
+                    stats.ratings.recent.slice(0, 5).map((r, idx) => (
+                      <div key={r.id || idx} className="flex items-start justify-between border-b last:border-0 pb-3 last:pb-0" data-testid={`recent-rating-${idx}`}>
+                        <div className="flex-1 pr-2">
+                          <div className="flex items-center gap-1 mb-1">
+                            {[...Array(5)].map((_, i) => (
+                              <span key={i} style={{ color: i < (r.rating || 0) ? '#F9C74F' : '#d1d5db', fontSize: 14 }}>★</span>
+                            ))}
+                            <span className="text-xs text-gray-500 ml-2">{r.rating}/5</span>
+                          </div>
+                          {r.review && <p className="text-sm text-gray-700 line-clamp-2">{r.review}</p>}
+                          <p className="text-xs text-gray-500 mt-1">
+                            <span className="font-medium">{r.client_name || 'Client'}</span> → {r.advocate_name || 'Advocate'}
+                          </p>
+                        </div>
+                        <p className="text-xs text-gray-400 whitespace-nowrap">{r.created_at ? new Date(r.created_at).toLocaleDateString() : ''}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-center text-gray-500 py-4">No ratings yet</p>
                   )}
                 </div>
               </CardContent>

@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../../components/ui/dialog';
 import { 
   Scale, ArrowLeft, FileText, Calendar, MessageSquare, Upload, User, 
-  Clock, CheckCircle, AlertCircle, Loader2, Download, Send, Briefcase, Plus 
+  Clock, CheckCircle, AlertCircle, Loader2, Download, Send, Briefcase, Plus, Mail 
 } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
 import Sidebar from '../../components/advocate/Sidebar';
@@ -416,6 +416,41 @@ const AdvocateCaseDetail = () => {
                 <p className="font-medium">{formatDate(caseData.created_at)}</p>
               </div>
             </div>
+
+
+                 {/* Client Contact Actions */}
+            {(caseData.client?.email || caseData.client?.phone) && (
+              <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-gray-100">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!caseData.client?.phone}
+                  onClick={() => {
+                    const phone = (caseData.client?.phone || '').replace(/[^0-9+]/g, '');
+                   if (phone) window.open(`https://wa.me/${phone.replace(/^\+/, '')}`, '_blank');
+                  }}
+                  data-testid="send-message-btn"
+                  className="border-green-600 text-green-700 hover:bg-green-50"
+                >
+                  <MessageSquare className="w-4 h-4 mr-2" />
+                  Send Message {caseData.client?.phone ? '' : '(no phone)'}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!caseData.client?.email}
+                  onClick={() => {
+                    const email = caseData.client?.email;
+                    if (email) window.location.href = `mailto:${email}?subject=${encodeURIComponent('Regarding your case: ' + (caseData.title || ''))}`;
+                  }}
+                  data-testid="send-email-btn"
+                  className="border-blue-600 text-blue-700 hover:bg-blue-50"
+                >
+                  <Mail className="w-4 h-4 mr-2" />
+                  Email Client {caseData.client?.email ? '' : '(no email)'}
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
 

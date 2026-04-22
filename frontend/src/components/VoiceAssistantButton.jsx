@@ -37,7 +37,7 @@ const VoiceAssistantButton = () => {
       animate={{ scale: 1 }}
       whileHover={{ scale: 1.1 }}
       whileTap={{ scale: 0.95 }}
-      transition={{ type: "spring", stiffness: 300, damping: 20 }}
+      transition={{ type: "spring", stiffness: 300, d amping: 20 }}
       aria-label="Open AI Legal Assistant"
     >
       <motion.div

@@ -1175,6 +1175,20 @@ const ClientDashboard = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+         {/* Floating AI Bot Reopen Button */}
+      <button
+        onClick={() => setShowBotPopup(true)}
+        data-testid="floating-ai-bot-btn"
+        className="fixed bottom-6 right-6 z-50 w-16 h-16 rounded-full bg-gradient-to-br from-purple-600 to-blue-600 text-white shadow-2xl hover:scale-110 active:scale-95 transition-transform flex items-center justify-center group"
+        aria-label="Open AI Assistant"
+      >
+        <Bot size={28} className="group-hover:rotate-12 transition-transform" />
+        <span className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full border-2 border-white animate-pulse" />
+        <span className="absolute right-full mr-3 px-3 py-2 rounded-lg bg-zinc-900 text-white text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+          Ask AI Assistant
+        </span>
+      </button>
     </div>
   );
 };

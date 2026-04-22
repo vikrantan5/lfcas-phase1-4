@@ -224,7 +224,8 @@ const AIOnboarding = () => {
                   <Mic size={20} className="text-white" />
                 </div>
                 <h3 className="font-semibold text-gray-900 mb-1">Voice Enabled</h3>
-                <p className="text-sm text-gray-600">Speak naturally in English, Hindi, or Bengali</p>
+                {/* <p className="text-sm text-gray-600">Speak naturally in English, Hindi, or Bengali</p> */}
+                 <p className="text-sm text-gray-600">Speak naturally in English or Hindi</p>
               </div>
               <div className="bg-blue-50 rounded-xl p-4">
                 <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center mb-3">

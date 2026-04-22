@@ -13,6 +13,8 @@ const FindAdvocates = () => {
   const { toast } = useToast();
   const [advocates, setAdvocates] = useState([]);
   const [loading, setLoading] = useState(false);
+    const [aiRecommended, setAiRecommended] = useState(false);
+  const [caseTypeFromAI, setCaseTypeFromAI] = useState(null);
   const [filters, setFilters] = useState({
     specialization: 'all',
     location: '',
@@ -29,6 +31,35 @@ const FindAdvocates = () => {
   });
   const [requesting, setRequesting] = useState(false);
 
+
+  // Load AI analysis from localStorage to auto-filter by case type
+  useEffect(() => {
+    try {
+      const pending = localStorage.getItem('pendingCaseAnalysis');
+      if (pending) {
+        const parsed = JSON.parse(pending);
+        const analysis = parsed.analysis || {};
+        const detectedType = analysis.case_type
+          || analysis.structured_output?.case_classification
+          || analysis?.data?.case_classification
+          || null;
+        if (detectedType) {
+          const normalized = String(detectedType).toLowerCase().replace(/s+/g, '_');
+          setCaseTypeFromAI(normalized);
+          setAiRecommended(true);
+          setFilters(prev => ({ ...prev, specialization: normalized }));
+          setRequestData(prev => ({
+            ...prev,
+            case_type: normalized,
+            description: analysis.case_summary || analysis?.data?.case_summary || ''
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn('Could not parse pendingCaseAnalysis:', e);
+    }
+  }, []);
+
   useEffect(() => {
     loadAdvocates();
   }, [filters.specialization, filters.location]);
@@ -42,7 +73,14 @@ const FindAdvocates = () => {
         ...(filters.location && { location: filters.location }),
       };
       const response = await advocateAPI.list(params);
-      setAdvocates(response.data || []);
+       const list = response.data || [];
+      // AI ranking: sort by rating desc, then experience desc
+      list.sort((a, b) => {
+        const r = (b.rating || 0) - (a.rating || 0);
+        if (r !== 0) return r;
+        return (b.experience_years || 0) - (a.experience_years || 0);
+      });
+      setAdvocates(list);
     } catch (error) {
       console.error('Failed to load advocates:', error);
       toast({ title: "Error", description: "Failed to load advocates", variant: "destructive" });
@@ -158,16 +196,68 @@ const FindAdvocates = () => {
         </div>
       </Card>
 
+      {/* AI Recommendation Banner */}
+      {aiRecommended && caseTypeFromAI && (
+        <Card className="p-5 bg-gradient-to-r from-purple-50 to-blue-50 border-2 border-purple-200" data-testid="ai-recommendation-banner">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-purple-600 to-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+              <Star className="text-white" size={20} />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold text-slate-900">AI-Recommended Advocates</h3>
+              <p className="text-sm text-slate-600 mt-0.5">
+                Based on your case analysis, we have filtered advocates who specialize in{' '}
+                <strong className="text-purple-700 capitalize">
+                  {caseTypeFromAI.replace(/_/g, ' ')}
+                </strong>
+                . Ranked by rating and experience.
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setAiRecommended(false);
+                setFilters(prev => ({ ...prev, specialization: 'all' }));
+              }}
+              data-testid="clear-ai-filter-btn"
+            >
+              Show All
+            </Button>
+          </div>
+        </Card>
+      )}
+
       {/* Results */}
       {loading ? (
         <div className="flex justify-center items-center py-20">
           <Loader2 className="animate-spin text-violet-600" size={40} />
         </div>
       ) : filteredAdvocates.length === 0 ? (
-        <Card className="p-12 text-center">
+        <Card className="p-12 text-center" data-testid="no-advocates-card">
           <UserCheck className="mx-auto text-slate-300 mb-4" size={64} />
-          <h3 className="text-xl font-semibold text-slate-700 mb-2">No Advocates Found</h3>
-          <p className="text-slate-500">Try adjusting your filters to find more advocates</p>
+          <h3 className="text-xl font-semibold text-slate-700 mb-2">
+            {aiRecommended && caseTypeFromAI
+              ? `No advocates available for ${caseTypeFromAI.replace(/_/g, ' ')} currently.`
+              : 'No Advocates Found'}
+          </h3>
+          <p className="text-slate-500 mb-4">
+            {aiRecommended
+              ? 'We could not find any verified advocates specialising in this case type right now. You can browse all advocates instead.'
+              : 'Try adjusting your filters to find more advocates'}
+          </p>
+          {aiRecommended && (
+            <Button
+              onClick={() => {
+                setAiRecommended(false);
+                setFilters(prev => ({ ...prev, specialization: 'all' }));
+              }}
+              className="bg-gradient-to-r from-purple-600 to-blue-600"
+              data-testid="browse-all-advocates-btn"
+            >
+              Browse All Advocates
+            </Button>
+          )}
         </Card>
       ) : (
         <>

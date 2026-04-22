@@ -7,7 +7,7 @@ import '@/styles/language-selector.css';
 const languages = [
   { code: 'english', name: 'English', flag: '🇬🇧', greeting: 'Hello' },
   { code: 'hindi', name: 'हिंदी (Hindi)', flag: '🇮🇳', greeting: 'नमस्ते' },
-  { code: 'bengali', name: 'বাংলা (Bengali)', flag: '🇧🇩', greeting: 'নমস্কার' },
+  // { code: 'bengali', name: 'বাংলা (Bengali)', flag: '🇧🇩', greeting: 'নমস্কার' },
 ];
 
 const LanguageSelector = ({ onSelect }) => {

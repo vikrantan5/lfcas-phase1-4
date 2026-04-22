@@ -27,7 +27,9 @@ const VoiceAssistantButton = () => {
     return null;
   }
   return (
-    <motion.button
+<>
+<Bot className="voice-button-icon" size={28} />
+    {/* <motion.button
       data-testid="voice-assistant-button"
       onClick={() => setIsOpen(true)}
       className="voice-assistant-button"
@@ -52,10 +54,12 @@ const VoiceAssistantButton = () => {
           repeatType: 'loop',
         }}
       >
-        <Bot className="voice-button-icon" size={28} />
+        
       </motion.div>
       <span className="voice-button-text">Chat with AI</span>
-    </motion.button>
+    </motion.button> */}
+
+</>
   );
 };
 

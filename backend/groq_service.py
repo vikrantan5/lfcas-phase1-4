@@ -35,10 +35,9 @@ def get_groq_client():
     return _groq_client
 
 
-# LEGAL INTENT DETECTION PROMPT
 LEGAL_INTENT_DETECTION_PROMPT = """You are an advanced AI Legal Intelligence Engine.
 
-Your job is to deeply analyze a user's full conversation transcript and determine whether it is a real legal problem.
+Your job is to deeply analyze a user's full conversation transcript and determine whether it is a real legal problem / case-related matter.
 
 IMPORTANT RULES:
 
@@ -47,6 +46,9 @@ IMPORTANT RULES:
 3. Even if legal keywords like "divorce", "case", "court" are missing, still detect intent from meaning.
 4. The user may describe problems in informal, emotional, or indirect language.
 5. You must detect intent from the situation, not words.
+6. BE STRICT: If the query is clearly general knowledge, trivia, or unrelated chit-chat (e.g., "what is the capital of India", "who is the Prime Minister", "tell me about cricket", "what's the weather", "write code for me", "how to cook", "recommend movies"), it is NOT legal. Mark is_legal=false with high confidence (>= 0.9).
+7. General legal questions about Indian law (e.g., "what are my rights as a tenant", "how does bail work", "what is IPC 498A") ARE legal and should be accepted.
+8. If the user's input is ambiguous, very short, or could be either (e.g., "hello", "help me"), DO NOT guess. Mark is_legal=false with confidence 0.5 so the system asks for clarification.
 
 ---
 
@@ -98,12 +100,19 @@ Analyze the conversation and return:
 
 ---
 
-🚫 NON-LEGAL CASES:
+🚫 NON-LEGAL CASES (mark is_legal=false with HIGH confidence 0.9+):
 
-Mark as false ONLY IF:
-- Random text (hello, test, abc)
-- Jokes
-- Completely unrelated topics (movies, coding, games)
+- Random text / greetings (hello, test, abc, hi, hey)
+- Jokes / casual chit-chat
+- General knowledge trivia ("capital of India", "who is PM", "distance between...", "when was X born", sports stats, science facts, geography, history dates)
+- Coding / tech help requests
+- Recipes / cooking / food
+- Movies / TV / entertainment recommendations
+- Weather / news / current affairs (unless directly legal)
+- Mathematical problems, essays, translations
+- Medical / health advice (unless medical negligence case)
+- Homework / assignment help
+- Any topic not tied to a real legal dispute, right, or case
 
 ---
 
@@ -163,9 +172,45 @@ Input:
 Output:
 {{
   "is_legal": false,
-  "reason_if_rejected": "Not a legal issue"
+  "confidence": 0.95,
+  "reason_if_rejected": "Casual greeting, not a legal issue"
 }}
 
+---
+
+Input:
+"what is the capital of India"
+
+Output:
+{{
+  "is_legal": false,
+  "confidence": 0.98,
+  "reason_if_rejected": "General knowledge trivia, unrelated to any legal matter"
+}}
+
+---
+
+Input:
+"who is the prime minister of india"
+
+Output:
+{{
+  "is_legal": false,
+  "confidence": 0.98,
+  "reason_if_rejected": "General knowledge question, not a legal problem"
+}}
+
+---
+
+Input:
+"can you write python code for a sorting algorithm"
+
+Output:
+{{
+  "is_legal": false,
+  "confidence": 0.98,
+  "reason_if_rejected": "Coding help request, not a legal issue"
+}}
 ---
 
 Now analyze the following conversation:
@@ -237,25 +282,27 @@ async def detect_legal_intent(conversation_text: str) -> Dict:
         except (json.JSONDecodeError, ValueError) as e:
             logger.error(f"Failed to parse legal intent response: {e}")
             logger.error(f"Raw response: {response_content}")
-            
-            # Fallback: if we can't parse, assume it's legal to avoid rejecting valid cases
+
+            # Fail-safe: if we can't parse, treat as NOT legal so the bot asks for
+            # clarification instead of blindly answering general questions.
             return {
                 "success": True,
-                "is_legal": True,
-                "case_type": "other",
+                "is_legal": False,
+                "case_type": None,
                 "confidence": 0.5,
-                "summary": "Unable to parse AI response, allowing for further analysis",
-                "reason_if_rejected": None
+                "summary": "Unable to parse AI response",
+                "reason_if_rejected": "Classifier response was not parseable; ask user to clarify legal issue"
             }
-    
+
     except Exception as e:
         logger.error(f"Legal intent detection failed: {str(e)}")
-        # Fallback: assume legal to avoid false rejections
+        # Fail-safe: on classifier failure, treat as NOT legal so the bot
+        # asks for clarification instead of answering non-legal queries.
         return {
             "success": False,
-            "is_legal": True,
+            "is_legal": False,
             "error": str(e),
-            "case_type": "other",
+            "case_type": None,
             "confidence": 0.5
         }
 

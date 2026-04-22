@@ -3664,7 +3664,7 @@ async def get_next_question(
         if user_message and len(user_message.strip()) > 3:
             try:
                 # Classify using the whole conversation so context is preserved
-                combined_text = "n".join(
+                combined_text = "".join(
                     f"{m['role']}: {m['content']}" for m in conversation_history
                 )
                 intent = await detect_legal_intent(combined_text)
@@ -3672,11 +3672,13 @@ async def get_next_question(
                 is_legal = intent.get("is_legal", True)
                 confidence = intent.get("confidence", 0.5) or 0.5
 
-                # Only reject when the AI is confidently NOT legal
-                if is_legal is False and confidence >= 0.6:
+                # STRICT: Reject whenever the AI classifier says NOT legal.
+                # Earlier code required confidence >= 0.6 which let general
+                # knowledge questions (e.g. "capital of India") slip through.
+                if is_legal is False:
                     refusal = {
-                        "english": "I can only assist with legal or case-related matters (for example: divorce, property, custody, domestic violence, harassment, fraud, etc.). Could you please describe your legal problem?",
-                        "hindi": "मैं केवल कानूनी या केस से जुड़े मामलों में मदद कर सकता हूँ (जैसे तलाक, संपत्ति, हिरासत, घरेलू हिंसा, उत्पीड़न, धोखाधड़ी आदि)। कृपया अपनी कानूनी समस्या बताइए।"
+                        "english": "I can only help with legal or case-related matters (for example: divorce, property disputes, child custody, domestic violence, dowry harassment, maintenance, fraud, cheating, tenant issues, etc.). Your question doesn't seem to be a legal problem. Please describe the legal issue you're facing so I can assist you.",
+                        "hindi": "मैं केवल कानूनी या केस से जुड़े मामलों में मदद कर सकता हूँ (जैसे तलाक, संपत्ति विवाद, बच्चों की कस्टडी, घरेलू हिंसा, दहेज उत्पीड़न, गुजारा भत्ता, धोखाधड़ी, किरायेदारी विवाद आदि)। आपका प्रश्न कानूनी समस्या नहीं लगता। कृपया अपनी कानूनी समस्या बताइए ताकि मैं मदद कर सकूँ।"
                     }.get(language, "I can only assist with legal or case-related matters. Please describe your legal problem.")
 
                     return {
@@ -3686,8 +3688,19 @@ async def get_next_question(
                         "non_legal": True
                     }
             except Exception as intent_err:
-                # Fail-open: if the classifier breaks, continue to normal flow
-                logger.warning(f"Legal intent classifier failed, continuing: {intent_err}")
+                # On classifier failure, err on the side of caution and ask
+                # the user to rephrase as a legal question.
+                logger.warning(f"Legal intent classifier failed: {intent_err}")
+                fallback_refusal = {
+                    "english": "I can only assist with legal or case-related matters. Please describe the legal issue you are facing (e.g., divorce, property dispute, harassment, fraud).",
+                    "hindi": "मैं केवल कानूनी मामलों में मदद कर सकता हूँ। कृपया अपनी कानूनी समस्या बताइए (जैसे तलाक, संपत्ति विवाद, उत्पीड़न, धोखाधड़ी)।"
+                }.get(language, "I can only assist with legal or case-related matters. Please describe your legal problem.")
+                return {
+                    "success": True,
+                    "next_question": fallback_refusal,
+                    "ready_to_analyze": False,
+                    "non_legal": True
+                }
         
         # Continue with normal flow - generate next question based on conversation
         # Determine next question based on conversation stage
@@ -3704,9 +3717,25 @@ async def get_next_question(
         if language not in lang_instructions:
             language = "english"
         
-        system_prompt = f"""You are a real-time conversational AI assistant specializing in Indian family law.
+        system_prompt = f"""You are a real-time conversational AI assistant specializing in Indian family law and legal / case-related matters ONLY.
 
 IMPORTANT: {lang_instructions.get(language, 'Respond in English')}
+
+---
+
+🚫 STRICT SCOPE — REFUSE NON-LEGAL QUESTIONS:
+
+You MUST ONLY answer questions related to:
+- The user's own legal case or legal dispute (family, civil, criminal, consumer, property, employment, cyber, etc.)
+- General Indian legal questions and rights (bail, IPC sections, court procedure, tenant rights, etc.)
+- Legal advice, procedures, documents, advocates, and case lifecycle
+
+If the user asks ANYTHING unrelated to law (e.g., "capital of India", "who is the Prime Minister", general knowledge, sports, cooking, coding, weather, movies, homework, jokes, casual chit-chat), you MUST politely refuse with exactly this message (in the current language):
+"I can only help with legal or case-related matters. Please describe the legal issue you're facing so I can assist you."
+
+Do NOT answer general knowledge questions, even if you know the answer. Stay strictly on legal topics.
+
+---
 
 ---
 

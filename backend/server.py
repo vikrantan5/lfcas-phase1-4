@@ -3519,11 +3519,14 @@ async def get_next_question(
         groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
         
         # Enhanced system prompt for REAL-TIME CONVERSATIONAL BEHAVIOR
+        # NOTE: Bengali is intentionally disabled - chatbot must only respond in English or Hindi
         lang_instructions = {
-            "english": "Respond ONLY in English",
-            "hindi": "केवल हिंदी में जवाब दें। कोई अंग्रेजी शब्द न इस्तेमाल करें।",
-            "bengali": "শুধুমাত্র বাংলায় উত্তর দিন"
+            "english": "Respond ONLY in English. Do NOT use Bengali, Bangla, or any other regional language.",
+            "hindi": "केवल हिंदी में जवाब दें। कोई अंग्रेजी या बंगाली शब्द न इस्तेमाल करें।"
         }
+        # Force non-supported languages to English
+        if language not in lang_instructions:
+            language = "english"
         
         system_prompt = f"""You are a real-time conversational AI assistant specializing in Indian family law.
 
@@ -3618,8 +3621,7 @@ Now respond naturally to the following user input:
             if not next_question.endswith("'Finish & Analyze'") and not next_question.endswith("विश्लेषण करें"):
                 completion_msg = {
                     "english": " I now have enough information to provide you with a comprehensive legal analysis. Click 'Finish & Analyze' button below to see detailed insights, applicable laws, and recommended advocates.",
-                    "hindi": " अब मेरे पास आपके मामले का विस्तृत विश्लेषण करने के लिए पर्याप्त जानकारी है। विस्तृत जानकारी, लागू कानून और अनुशंसित वकील देखने के लिए नीचे 'समाप्त करें और विश्लेषण करें' बटन पर क्लिक करें।",
-                    "bengali": " এখন আমার কাছে আপনার মামলার বিস্তারিত বিশ্লেষণ করার জন্য যথেষ্ট তথ্য আছে। বিস্তারিত অন্তর্দৃষ্টি, প্রযোজ্য আইন এবং প্রস্তাবিত আইনজীবী দেখতে নীচে 'শেষ করুন এবং বিশ্লেষণ করুন' বোতামে ক্লিক করুন।"
+                    "hindi": " अब मेरे पास आपके मामले का विस्तृत विश्लेषण करने के लिए पर्याप्त जानकारी है। विस्तृत जानकारी, लागू कानून और अनुशंसित वकील देखने के लिए नीचे 'समाप्त करें और विश्लेषण करें' बटन पर क्लिक करें।"
                 }.get(language, "")
                 
                 next_question = next_question.strip() + completion_msg
@@ -3634,8 +3636,7 @@ Now respond naturally to the following user input:
         logger.error(f"Error getting next question: {str(e)}")
         fallback_msg = {
             "english": "Could you please provide more details about your situation?",
-            "hindi": "क्या आप अपनी स्थिति के बारे में अधिक विवरण दे सकते हैं?",
-            "bengali": "আপনি কি আপনার পরিস্থিতি সম্পর্কে আরও বিস্তারিত জানাতে পারেন?"
+            "hindi": "क्या आप अपनी स्थिति के बारे में अधिक विवरण दे सकते हैं?"
         }.get(language, "Could you please provide more details about your situation?")
         
         return {

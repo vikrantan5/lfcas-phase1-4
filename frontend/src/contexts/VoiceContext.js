@@ -62,11 +62,10 @@ export const VoiceProvider = ({ children }) => {
 
     const recognition = new SpeechRecognition();
     
-    // Language mapping
+    // Language mapping (Bengali removed; only English & Hindi supported)
     const langMap = {
       'english': 'en-IN',
-      'hindi': 'hi-IN',
-      'bengali': 'bn-IN'
+      'hindi': 'hi-IN'
     };
     
     recognition.lang = langMap[selectedLanguage] || 'en-IN';
@@ -243,11 +242,10 @@ export const VoiceProvider = ({ children }) => {
 
     const utterance = new SpeechSynthesisUtterance(text);
     
-    // Language mapping for voices
+    // Language mapping for voices (Bengali removed)
     const voiceLangMap = {
       'english': 'en-IN',
-      'hindi': 'hi-IN',
-      'bengali': 'bn-IN'
+      'hindi': 'hi-IN'
     };
     utterance.lang = voiceLangMap[lang] || 'en-IN';
     utterance.rate = 0.95;

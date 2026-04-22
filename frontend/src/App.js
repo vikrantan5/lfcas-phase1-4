@@ -273,6 +273,10 @@ function App() {
               {/* Catch all */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
+              {/* Floating AI Assistant Button + Modal (persistent for authenticated clients) */}
+            <VoiceAssistantButton />
+            <VoiceAssistantModal />
+
             
 
           </BrowserRouter>

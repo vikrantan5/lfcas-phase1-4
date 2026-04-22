@@ -134,7 +134,7 @@ const Register = () => {
                 value={formData.full_name}
                 onChange={(e) => handleChange('full_name', e.target.value)}
                 required
-                className="bg-zinc-950/80 border-zinc-700 h-14 text-lg focus:border-blue-500 transition-all"
+                  className="bg-zinc-950/80 border-zinc-700 h-14 text-lg text-white placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40 transition-all"
               />
             </div>
 
@@ -150,7 +150,7 @@ const Register = () => {
                 value={formData.email}
                 onChange={(e) => handleChange('email', e.target.value)}
                 required
-                className="bg-zinc-950/80 border-zinc-700 h-14 text-lg focus:border-blue-500 transition-all"
+                  className="bg-zinc-950/80 border-zinc-700 h-14 text-lg text-white placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40 transition-all"
               />
             </div>
 
@@ -165,7 +165,7 @@ const Register = () => {
                 placeholder="+91 98765 43210"
                 value={formData.phone}
                 onChange={(e) => handleChange('phone', e.target.value)}
-                className="bg-zinc-950/80 border-zinc-700 h-14 text-lg focus:border-blue-500 transition-all"
+                className="bg-zinc-950/80 border-zinc-700 h-14 text-lg text-white placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40 transition-all"
               />
             </div>
 
@@ -181,7 +181,7 @@ const Register = () => {
                   onChange={(e) => handleChange('password', e.target.value)}
                   required
                   minLength={6}
-                  className="bg-zinc-950/80 border-zinc-700 h-14 text-lg pr-12 focus:border-blue-500 transition-all"
+                  className="bg-zinc-950/80 border-zinc-700 h-14 text-lg text-white placeholder:text-zinc-400 pr-12 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40 transition-all"
                 />
                 <button
                   type="button"
@@ -198,14 +198,14 @@ const Register = () => {
             <div className="space-y-2">
               <Label className="text-zinc-200">I am registering as a</Label>
               <Select value={formData.role} onValueChange={(value) => handleChange('role', value)}>
-                <SelectTrigger className="bg-zinc-300/80 border-zinc-700 h-14 text-lg focus:ring-blue-500">
+                               <SelectTrigger className="bg-zinc-950/80 border-zinc-700 h-14 text-lg text-white focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-zinc-300 border-zinc-700">
-                  <SelectItem value="client" className="text-lg py-3">
+                <SelectContent className="bg-zinc-900 border-zinc-700 text-white">
+                  <SelectItem value="client" className="text-lg py-3 text-white focus:bg-zinc-800 focus:text-white">
                     Client – Seeking Legal Help
                   </SelectItem>
-                  <SelectItem value="advocate" className="text-lg py-3">
+                  <SelectItem value="advocate" className="text-lg py-3 text-white focus:bg-zinc-800 focus:text-white">
                     Advocate – Legal Professional
                   </SelectItem>
                 </SelectContent>

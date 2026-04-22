@@ -126,7 +126,7 @@ const Login = () => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="bg-zinc-950/80 border-zinc-700 focus:border-blue-500 h-14 text-lg placeholder:text-zinc-500 transition-all"
+                     className="bg-zinc-950/80 border-zinc-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40 h-14 text-lg text-white placeholder:text-zinc-400 transition-all"
                 />
               </div>
             </div>
@@ -142,7 +142,7 @@ const Login = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="bg-zinc-950/80 border-zinc-700 focus:border-blue-500 h-14 text-lg placeholder:text-zinc-500 pr-12 transition-all"
+                  className="bg-zinc-950/80 border-zinc-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40 h-14 text-lg text-white placeholder:text-zinc-400 pr-12 transition-all"
                 />
                 <button
                   type="button"

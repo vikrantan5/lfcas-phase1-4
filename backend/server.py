@@ -3664,7 +3664,7 @@ async def get_next_question(
         if user_message and len(user_message.strip()) > 3:
             try:
                 # Classify using the whole conversation so context is preserved
-                combined_text = "\n".join(
+                combined_text = "n".join(
                     f"{m['role']}: {m['content']}" for m in conversation_history
                 )
                 intent = await detect_legal_intent(combined_text)
@@ -3690,13 +3690,6 @@ async def get_next_question(
                 logger.warning(f"Legal intent classifier failed, continuing: {intent_err}")
         
         # Continue with normal flow - generate next question based on conversation
-        # ... rest of your code here
-        
-    except Exception as e:
-        logger.error(f"Error in get_next_question: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-        
-        
         # Determine next question based on conversation stage
         from groq import Groq
         groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
@@ -3820,7 +3813,7 @@ Now respond naturally to the following user input:
         fallback_msg = {
             "english": "Could you please provide more details about your situation?",
             "hindi": "क्या आप अपनी स्थिति के बारे में अधिक विवरण दे सकते हैं?"
-        }.get(language, "Could you please provide more details about your situation?")
+        }.get(language if 'language' in locals() else 'english', "Could you please provide more details about your situation?")
         
         return {
             "success": False,

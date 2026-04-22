@@ -25,6 +25,8 @@ const VoiceAssistantModal = () => {
     setError,
     browserSupported,
     readyToAnalyze,
+        silenceMs,
+    setSilenceMs,
     startSession,
     stopRecording,
     startRecording,
@@ -250,6 +252,39 @@ const VoiceAssistantModal = () => {
                     <div className="text-sm text-amber-600 flex items-center gap-2">
                       <AlertCircle size={16} />
                       <span>Voice not supported in this browser. Use text input below.</span>
+                    </div>
+                  )}
+
+
+                         {/* Silence threshold selector */}
+                  {browserSupported && (
+                    <div
+                      className="flex items-center gap-2 text-xs ml-auto"
+                      data-testid="silence-threshold-container"
+                      title="Auto-send your speech to AI after this much quiet"
+                    >
+                      <label
+                        htmlFor="silence-ms-select"
+                        className="text-gray-600 font-medium whitespace-nowrap"
+                      >
+                        Auto-send after
+                      </label>
+                      <select
+                        id="silence-ms-select"
+                        data-testid="silence-threshold-select"
+                        value={silenceMs}
+                        onChange={(e) => setSilenceMs(parseInt(e.target.value, 10))}
+                        className="border border-gray-300 bg-white text-gray-800 rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                      >
+                        <option value={1000}>1.0s</option>
+                        <option value={1500}>1.5s</option>
+                        <option value={2000}>2.0s</option>
+                        <option value={2500}>2.5s</option>
+                        <option value={3000}>3.0s</option>
+                        <option value={4000}>4.0s</option>
+                        <option value={5000}>5.0s</option>
+                      </select>
+                      <span className="text-gray-500 hidden sm:inline">of silence</span>
                     </div>
                   )}
                 </div>

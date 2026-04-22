@@ -41,10 +41,31 @@ export const VoiceProvider = ({ children }) => {
   const isAISpeakingRef = useRef(false);
   const userManuallyStoppedRef = useRef(false);
 
-    // Silence-detection buffer: accumulate speech and flush after 2s of silence
+
+    // Live refs — so speech-recognition callbacks ALWAYS read the current value
+  // (avoids stale-closure bugs where recognition was bound before session was set)
+  const sessionRef = useRef(null);
+  const languageRef = useRef('english');
+  useEffect(() => { sessionRef.current = session; }, [session]);
+  useEffect(() => { languageRef.current = language; }, [language]);
+
+    // Silence-detection buffer: accumulate speech and flush after X ms of silence
   const silenceTimerRef = useRef(null);
   const transcriptBufferRef = useRef('');
-  const SILENCE_MS = 2000;
+  // Configurable silence threshold (ms). Persisted in localStorage.
+  const [silenceMs, setSilenceMsState] = useState(() => {
+    try {
+      const saved = parseInt(localStorage.getItem('voice_silence_ms'), 10);
+      return Number.isFinite(saved) && saved >= 500 && saved <= 10000 ? saved : 2000;
+    } catch (_) { return 2000; }
+  });
+  const silenceMsRef = useRef(silenceMs);
+  useEffect(() => { silenceMsRef.current = silenceMs; }, [silenceMs]);
+  const setSilenceMs = useCallback((ms) => {
+    const val = Math.max(500, Math.min(10000, parseInt(ms, 10) || 2000));
+    setSilenceMsState(val);
+    try { localStorage.setItem('voice_silence_ms', String(val)); } catch (_) {}
+  }, []);
 
   // Check browser support on mount
   useEffect(() => {
@@ -123,7 +144,7 @@ export const VoiceProvider = ({ children }) => {
         console.log('📝 Buffered (final chunk):', transcriptBufferRef.current);
       }
 
-      // Reset silence timer on every result — flush only after SILENCE_MS of quiet
+      // Reset silence timer on every result — flush only after configured silence of quiet
       if (silenceTimerRef.current) {
         clearTimeout(silenceTimerRef.current);
       }
@@ -132,12 +153,12 @@ export const VoiceProvider = ({ children }) => {
         const finalText = (transcriptBufferRef.current || interimTranscript || '').trim();
         if (!finalText) return;
 
-        console.log('⏱️ 2s silence detected — flushing transcript to AI:', finalText);
+        console.log(`⏱️ ${silenceMsRef.current}ms silence detected — flushing transcript to AI:`, finalText);
         transcriptBufferRef.current = '';
         setCurrentTranscript('');
         setIsSpeaking(false);
         handleUserSpeech(finalText);
-      }, SILENCE_MS);
+      }, silenceMsRef.current);
     };
 
     recognition.onerror = (event) => {
@@ -181,7 +202,7 @@ export const VoiceProvider = ({ children }) => {
         return;
       }
       // Auto-restart if still in recording mode and user hasn't manually stopped
-      if (isListeningRef.current && session && !userManuallyStoppedRef.current) {
+      if (isListeningRef.current && sessionRef.current && !userManuallyStoppedRef.current) {
         console.log('🔄 Restarting speech recognition...');
         try {
           recognition.start();
@@ -198,7 +219,17 @@ export const VoiceProvider = ({ children }) => {
 
   // Handle user speech - save and get AI response
   const handleUserSpeech = async (transcript) => {
-    if (!session || !transcript) return;
+    // Always read the LIVE session/language from refs — the recognition
+    // callback was bound before `session` was set in state, so relying on
+    // the closure's `session` would early-return and the user would see
+    // \"nothing happens\".
+    const activeSession = sessionRef.current || session;
+    const activeLanguage = languageRef.current || language;
+
+    if (!activeSession || !transcript) {
+      console.warn('⚠️ handleUserSpeech skipped:', { hasSession: !!activeSession, transcript });
+      return;
+    }
 
 
        // Guard: ignore input captured while AI is speaking (TTS echo protection)
@@ -229,7 +260,7 @@ export const VoiceProvider = ({ children }) => {
       await axios.post(
         `${API}/voice/save-message`,
         {
-          session_id: session.id,
+          session_id: activeSession.id,
           sender: 'user',
           message: transcript,
           message_type: 'text'
@@ -243,15 +274,15 @@ export const VoiceProvider = ({ children }) => {
       const response = await axios.post(
         `${API}/voice/get-next-question`,
         {
-          session_id: session.id,
+          session_id: activeSession.id,
           user_message: transcript,
-          language
+          language: activeLanguage
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       console.log('✅ AI response received:', response.data);
 
-      if (response.data.success) {
+      if (response.data && response.data.success) {
         const aiResponse = response.data.next_question;
         const ready = response.data.ready_to_analyze;
         
@@ -270,7 +301,7 @@ export const VoiceProvider = ({ children }) => {
         await axios.post(
           `${API}/voice/save-message`,
           {
-            session_id: session.id,
+            session_id: activeSession.id,
             sender: 'ai',
             message: aiResponse,
             message_type: 'text'
@@ -280,9 +311,18 @@ export const VoiceProvider = ({ children }) => {
         console.log('✅ AI response saved');
 
         // Speak AI response
-        speakText(aiResponse, language);
+        speakText(aiResponse, activeLanguage);
       } else {
-        throw new Error('AI response failed');
+        // Graceful fallback: show the fallback message that the server returned (if any)
+        const fallbackMsg = response.data?.next_question
+          || 'Sorry, I could not generate a response. Could you please rephrase?';
+        const aiMsg = {
+          sender: 'ai',
+          message: fallbackMsg,
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, aiMsg]);
+        speakText(fallbackMsg, activeLanguage);
       }
     } catch (err) {
       console.error('❌ Error in handleUserSpeech:', err);
@@ -609,6 +649,8 @@ export const VoiceProvider = ({ children }) => {
     setError,
     browserSupported,
     readyToAnalyze,
+    silenceMs,
+    setSilenceMs,
     startSession,
     stopRecording,
     startRecording,

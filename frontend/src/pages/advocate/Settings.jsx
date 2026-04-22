@@ -57,15 +57,21 @@ const Settings = () => {
     { label: 'Other', value: 'other' },
   ];
 
-  // Safety normalizer — converts any label into an ENUM-safe value.
+  // Safety normalizer — converts any label/legacy value into an ENUM-safe value.
+  // IMPORTANT: use \s+ (whitespace) not s+ — the latter caused `property_dispute` to become `property_di_pute`.
   const normalizeCaseType = (value) => {
     if (!value) return value;
-    const v = String(value).toLowerCase().trim().replace(/s+/g, '_');
-    // Map known label-style aliases
+    const v = String(value).toLowerCase().trim().replace(/\s+/g, '_').replace(/\//g, '_');
+    // Map known label-style aliases to valid ENUM values
     const aliases = {
       'property_disputes': 'property_dispute',
+      'property_dispute': 'property_dispute',
       'maintenance': 'alimony',
+      'alimony_maintenance': 'alimony',
+      'alimony_/_maintenance': 'alimony',
       'adoption': 'other',
+      'domestic_violence': 'domestic_violence',
+      'child_custody': 'child_custody',
     };
     return aliases[v] || v;
   };

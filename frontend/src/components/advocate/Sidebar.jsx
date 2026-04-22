@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { advocateAPI } from '../../services/api';
 import { getAvatarUrl, handleAvatarError } from '../../lib/utils';
 import {
   Home, Briefcase, Search, Calendar, FileText, DollarSign,
@@ -9,23 +10,64 @@ import {
 } from 'lucide-react';
 
 const navItems = [
-  { icon: Home, label: 'Dashboard', badge: 5, path: '/advocate/dashboard' },
+  { icon: Home, label: 'Dashboard', path: '/advocate/dashboard' },
   { icon: Briefcase, label: 'My Cases', hasChevron: true, path: '/advocate/cases' },
   { icon: Search, label: 'Case Tracker', path: '/advocate/case-tracker' },
-  { icon: Calendar, label: 'Calendar', badge: 4, path: '/advocate/calendar' },
-  { icon: FileText, label: 'Requests', badge: 2, path: '/advocate/requests' },
+  { icon: Calendar, label: 'Calendar', path: '/advocate/calendar' },
+  { icon: FileText, label: 'Requests', path: '/advocate/requests' },
   { icon: FileText, label: 'Documents', path: '/advocate/documents' },
-  { icon: DollarSign, label: 'Payments', badge: 2, path: '/advocate/payments' },
+  { icon: DollarSign, label: 'Payments', path: '/advocate/payments' },
   { icon: MessageSquare, label: 'Messages', path: '/advocate/messages' },
   { icon: Users, label: 'Find Clients', path: '/advocate/find-clients' },
   { icon: Settings, label: 'Settings', path: '/advocate/settings' },
 ];
 
-const Sidebar = ({ isOpen, onClose, userName = 'Rahul Sharma' }) => {
+// Map enum value → human readable
+const CASE_TYPE_LABEL = {
+  divorce: 'Divorce Law',
+  child_custody: 'Child Custody',
+  alimony: 'Alimony / Maintenance',
+  domestic_violence: 'Domestic Violence',
+  dowry: 'Dowry Law',
+  property_dispute: 'Property Dispute',
+  other: 'General Practice',
+};
+
+const formatSpecialization = (specs) => {
+  if (!specs || !Array.isArray(specs) || specs.length === 0) return 'Advocate';
+  const primary = CASE_TYPE_LABEL[specs[0]] || specs[0].replace(/_/g, ' ');
+  return `${primary} Specialist`;
+};
+
+const Sidebar = ({ isOpen, onClose, userName, profile: profileProp }) => {
   const navigate = useNavigate();
   const location = useLocation();
-    const { user } = useAuth();
+  const { user } = useAuth();
   const avatarUrl = getAvatarUrl(user, { size: 100 });
+  const [profile, setProfile] = useState(profileProp || null);
+
+  useEffect(() => {
+    if (profileProp) {
+      setProfile(profileProp);
+      return;
+    }
+    // Fallback: load advocate profile if not passed as prop
+    const loadProfile = async () => {
+      try {
+        const response = await advocateAPI.list();
+        const mine = response.data?.find((adv) => adv.user_id === user?.id);
+        if (mine) setProfile(mine);
+      } catch (e) {
+        // non-fatal
+      }
+    };
+    if (user?.id) loadProfile();
+  }, [profileProp, user?.id]);
+
+  const displayName = userName || user?.full_name || 'Advocate';
+  const specLabel = formatSpecialization(profile?.specializations);
+  const locationLabel = profile?.location || 'Location not set';
+  const barId = profile?.bar_council_id || 'Not Provided';
 
   const isActive = (path) => {
     return location.pathname === path || location.pathname.startsWith(path + '/');
@@ -35,9 +77,8 @@ const Sidebar = ({ isOpen, onClose, userName = 'Rahul Sharma' }) => {
     if (item.path) {
       navigate(item.path);
     }
-    // Close sidebar on mobile after navigation
     if (window.innerWidth < 768) {
-      onClose();
+      onClose && onClose();
     }
   };
 
@@ -59,12 +100,12 @@ const Sidebar = ({ isOpen, onClose, userName = 'Rahul Sharma' }) => {
               data-testid="sidebar-profile-avatar"
               onError={handleAvatarError(user)}
             />
-            <div>
-              <p style={{ color: '#fff', fontSize: 15, fontWeight: 600, margin: 0, lineHeight: 1.3 }}>
-                {userName}
+            <div style={{ minWidth: 0 }}>
+              <p data-testid="sidebar-advocate-name" style={{ color: '#fff', fontSize: 15, fontWeight: 600, margin: 0, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {displayName}
               </p>
-              <p style={{ color: '#B3A8C0', fontSize: 12, fontWeight: 400, margin: 0 }}>
-                Family Law Specialist
+              <p data-testid="sidebar-advocate-spec" style={{ color: '#B3A8C0', fontSize: 12, fontWeight: 400, margin: 0 }}>
+                {specLabel}
               </p>
             </div>
           </div>
@@ -72,39 +113,22 @@ const Sidebar = ({ isOpen, onClose, userName = 'Rahul Sharma' }) => {
 
         {/* Navigation */}
         <nav style={{ padding: '8px 0', flex: 1 }}>
-          {navItems.map((item, i) => (
+          {navItems.map((item) => (
             <div
               key={item.label}
-               className={`nav-item ${isActive(item.path) ? 'active' : ''}`}
+              className={`nav-item ${isActive(item.path) ? 'active' : ''}`}
               data-testid={`nav-${item.label.toLowerCase().replace(/ /g, '-')}`}
               onClick={() => handleNavClick(item)}
               style={{ cursor: 'pointer' }}
             >
               <item.icon size={18} style={{ opacity: 0.9, flexShrink: 0 }} />
               <span>{item.label}</span>
-              {item.badge && <span className="nav-badge">{item.badge}</span>}
               {item.hasChevron && (
                 <ChevronDown size={14} style={{ marginLeft: 'auto', opacity: 0.5 }} />
               )}
             </div>
           ))}
         </nav>
-
-        {/* Upgrade Card */}
-        {/* <div className="upgrade-card" data-testid="upgrade-card">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <Trophy size={22} style={{ color: '#FFD700' }} />
-            <span style={{ color: '#fff', fontSize: 14, fontWeight: 700 }}>
-              Unlock More Leads!
-            </span>
-          </div>
-          <p style={{ color: '#D0C7DD', fontSize: 11, lineHeight: 1.5, margin: '0 0 12px' }}>
-            Get Premium Access to receive better client matches and more case opportunities.
-          </p>
-          <button className="btn-gold" data-testid="upgrade-now-btn">
-            Upgrade Now <ChevronRight size={14} />
-          </button>
-        </div> */}
 
         {/* Bottom Profile */}
         <div style={{ padding: '14px 16px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
@@ -116,40 +140,45 @@ const Sidebar = ({ isOpen, onClose, userName = 'Rahul Sharma' }) => {
               data-testid="sidebar-profile-avatar-bottom"
               onError={handleAvatarError(user)}
             />
-            <div>
-              <p style={{ color: '#fff', fontSize: 13, fontWeight: 600, margin: 0 }}>
-                {userName}
+            <div style={{ minWidth: 0 }}>
+              <p style={{ color: '#fff', fontSize: 13, fontWeight: 600, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {displayName}
               </p>
               <p style={{ color: '#B3A8C0', fontSize: 11, margin: 0 }}>
-                Family Law Specialist
+                {specLabel}
               </p>
             </div>
-            <Settings size={14} style={{ color: '#B3A8C0', marginLeft: 'auto', cursor: 'pointer' }} />
+            <Settings
+              size={14}
+              style={{ color: '#B3A8C0', marginLeft: 'auto', cursor: 'pointer' }}
+              onClick={() => navigate('/advocate/settings')}
+            />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#B3A8C0', fontSize: 11 }}>
             <MapPin size={12} />
-            <span>Delhi, India</span>
-            <span style={{ margin: '0 4px' }}>|</span>
-            <span style={{ opacity: 0.6 }}>&#9679;</span>
+            <span data-testid="sidebar-advocate-location">{locationLabel}</span>
           </div>
-          <div style={{ color: '#B3A8C0', fontSize: 11, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div data-testid="sidebar-advocate-barid" style={{ color: '#B3A8C0', fontSize: 11, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
             <Award size={12} />
-            <span>Bar Council ID: C12345678</span>
+            <span>Bar Council ID: {barId}</span>
           </div>
-          <div style={{
-            marginTop: 10,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            background: 'linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,193,7,0.1))',
-            borderRadius: 8,
-            padding: '6px 12px',
-            width: 'fit-content'
-          }}>
-            <Star size={14} style={{ color: '#FFD700', fill: '#FFD700' }} />
-            <span style={{ color: '#FFD700', fontSize: 12, fontWeight: 600 }}>Premium</span>
-            <ChevronRight size={12} style={{ color: '#FFD700' }} />
-          </div>
+          {profile?.experience_years ? (
+            <div style={{
+              marginTop: 10,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              background: 'linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,193,7,0.1))',
+              borderRadius: 8,
+              padding: '6px 12px',
+              width: 'fit-content'
+            }}>
+              <Star size={14} style={{ color: '#FFD700', fill: '#FFD700' }} />
+              <span style={{ color: '#FFD700', fontSize: 12, fontWeight: 600 }}>
+                {profile.experience_years}+ yrs exp
+              </span>
+            </div>
+          ) : null}
         </div>
       </aside>
     </>

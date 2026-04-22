@@ -300,14 +300,15 @@ const Documents = () => {
                 >
                   <Download size={14} />
                 </Button>
-                <Button 
+                              <Button 
                   size="sm" 
                   variant="outline"
-                  className="border-violet-200 text-violet-700 hover:bg-violet-50"
+                  className="flex-1 border-violet-300 text-violet-700 hover:bg-violet-50 font-medium"
                   onClick={() => handleRequestEdit(doc)}
                   data-testid={`request-edit-${doc.id}`}
                 >
-                  <Edit size={14} />
+                  <Edit size={14} className="mr-1" />
+                  Request Edit
                 </Button>
               </div>
             </Card>

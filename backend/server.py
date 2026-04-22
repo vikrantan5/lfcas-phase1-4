@@ -396,7 +396,6 @@ async def update_advocate_status(
     return {"message": "Status updated successfully"}
 
 
-
 @api_router.patch("/advocates/{advocate_id}")
 async def update_advocate_profile(
     advocate_id: str,
@@ -414,6 +413,34 @@ async def update_advocate_profile(
         if advocate.data[0]['user_id'] != current_user["user_id"]:
             raise HTTPException(status_code=403, detail="Access denied")
         
+        # Validate & sanitize specializations against DB ENUM (case_type)
+        VALID_CASE_TYPES = {
+            "divorce", "child_custody", "alimony",
+            "domestic_violence", "dowry", "property_dispute", "other"
+        }
+
+        def _normalize_case_type(v):
+            if v is None:
+                return v
+            s = str(v).strip().lower().replace(' ', '_').replace('/', '_').replace('__', '_')
+            aliases = {
+                "property_disputes": "property_dispute",
+                "maintenance": "alimony",
+                "alimony_maintenance": "alimony",
+                "alimony_/_maintenance": "alimony",
+            }
+            return aliases.get(s, s)
+
+        if 'specializations' in update_data and isinstance(update_data['specializations'], list):
+            normalized = [_normalize_case_type(x) for x in update_data['specializations']]
+            invalid = [x for x in normalized if x not in VALID_CASE_TYPES]
+            if invalid:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid specialization value(s): {', '.join(invalid)}. Allowed: {', '.join(sorted(VALID_CASE_TYPES))}"
+                )
+            update_data['specializations'] = normalized
+
         # Update profile
         result = supabase.table('advocates').update(update_data).eq('id', advocate_id).execute()
         
@@ -427,7 +454,6 @@ async def update_advocate_profile(
     except Exception as e:
         logger.error(f"Update advocate profile error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 
 # ============= AI QUERY ENDPOINTS (REFACTORED - No Case Creation) =============

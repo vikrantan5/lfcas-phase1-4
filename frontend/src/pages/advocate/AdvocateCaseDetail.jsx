@@ -17,6 +17,9 @@ import {
   Clock, CheckCircle, AlertCircle, Loader2, Download, Send, Briefcase, Plus 
 } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
+import Sidebar from '../../components/advocate/Sidebar';
+import DashboardHeader from '../../components/advocate/DashboardHeader';
+import '../../styles/advocate-dashboard.css';
 
 const AdvocateCaseDetail = () => {
   const { caseId } = useParams();
@@ -61,6 +64,7 @@ const AdvocateCaseDetail = () => {
     due_date: ''
   });
   const [requestingPayment, setRequestingPayment] = useState(false);
+    const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const caseStages = [
     { value: 'INITIATED', label: 'Initiated' },
@@ -350,43 +354,34 @@ const AdvocateCaseDetail = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-4">
-              <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back
-              </Button>
-              <div className="bg-blue-600 p-2 rounded-lg">
-                <Scale className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">LFCAS</h1>
-                <p className="text-xs text-gray-500">Case Management</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-3">
-              <Button onClick={() => setShowPaymentDialog(true)} variant="default">
+    <div className="advocate-dashboard">
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} userName={user?.full_name} />
+      <div className="adv-main">
+        <DashboardHeader userName={user?.full_name} onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
+        <div className="adv-content" style={{ padding: '24px', background: '#F7F7FB', minHeight: 'calc(100vh - 72px)' }}>
+          {/* Top Actions Row */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+            <Button variant="ghost" size="sm" onClick={() => navigate(-1)} data-testid="case-detail-back-btn">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Cases
+            </Button>
+            <div className="flex items-center space-x-3 flex-wrap gap-2">
+              <Button onClick={() => setShowPaymentDialog(true)} variant="default" data-testid="request-payment-btn">
                 <Plus className="w-4 h-4 mr-2" />
                 Request Payment
               </Button>
-              <Button onClick={() => setShowHearingDialog(true)}>
+              <Button onClick={() => setShowHearingDialog(true)} data-testid="schedule-hearing-btn">
                 <Calendar className="w-4 h-4 mr-2" />
                 Schedule Hearing
               </Button>
-              <Button variant="outline" onClick={() => setShowStageDialog(true)}>
+              <Button variant="outline" onClick={() => setShowStageDialog(true)} data-testid="update-stage-btn">
                 Update Stage
               </Button>
             </div>
           </div>
-        </div>
-      </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto py-2">
         {/* Case Header */}
         <Card className="mb-6">
           <CardHeader>
@@ -996,6 +991,8 @@ const AdvocateCaseDetail = () => {
           </form>
         </DialogContent>
       </Dialog>
+    </div>
+     </div>
     </div>
   );
 };

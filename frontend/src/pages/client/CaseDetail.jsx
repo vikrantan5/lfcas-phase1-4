@@ -17,6 +17,10 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 
+import Sidebar from '../../components/client/Sidebar';
+import Header from '../../components/client/Header';
+import '../../styles/client-dashboard.css';
+
 const CaseDetailPage = () => {
   const { caseId } = useParams();
   const navigate = useNavigate();
@@ -33,6 +37,7 @@ const CaseDetailPage = () => {
   const [uploading, setUploading] = useState(false);
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
+    const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     loadCaseDetails();
@@ -210,30 +215,20 @@ const CaseDetailPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-4">
-              <Button variant="ghost" size="sm" onClick={() => navigate(-1)} data-testid="back-button">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back
-              </Button>
-              <div className="bg-blue-600 p-2 rounded-lg">
-                <Scale className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">LFCAS</h1>
-                <p className="text-xs text-gray-500">Case Details</p>
-              </div>
-            </div>
+    <div className="lfcas-client-dashboard" style={{ minHeight: '100vh', background: '#F7F7FB' }}>
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} userName={user?.full_name} />
+      <div className="dashboard-main" style={{ marginLeft: 0 }}>
+        <Header userName={user?.full_name} onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
+        <div style={{ padding: '24px', maxWidth: 1200, margin: '0 auto' }}>
+          <div style={{ marginBottom: 20 }}>
+            <Button variant="ghost" size="sm" onClick={() => navigate(-1)} data-testid="back-button">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Cases
+            </Button>
           </div>
-        </div>
-      </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main>
         {/* Case Header */}
         <Card className="mb-6">
           <CardHeader>
@@ -678,6 +673,8 @@ const CaseDetailPage = () => {
           </TabsContent>
         </Tabs>
       </main>
+    </div>
+    </div>
     </div>
   );
 };

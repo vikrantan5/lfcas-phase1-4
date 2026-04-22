@@ -1071,6 +1071,65 @@ async def get_case(
     return case_response
 
 
+
+
+@api_router.get("/cases/{case_id}/ai-insights")
+async def get_case_ai_insights(
+    case_id: str,
+    force_regenerate: bool = Query(False),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get or generate AI insights for a case"""
+    try:
+        # Verify case access
+        case = supabase.table('cases').select('*').eq('id', case_id).execute()
+        
+        if not case.data or len(case.data) == 0:
+            raise HTTPException(status_code=404, detail="Case not found")
+        
+        case_data = case.data[0]
+        
+        # Check access permissions
+        if current_user["role"] == UserRole.CLIENT and case_data["client_id"] != current_user["user_id"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+        elif current_user["role"] == UserRole.ADVOCATE:
+            adv_profile = supabase.table('advocates').select('id').eq('user_id', current_user["user_id"]).execute()
+            if not adv_profile.data or adv_profile.data[0]['id'] != case_data.get("advocate_id"):
+                raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Check if AI insights already exist
+        if not force_regenerate and case_data.get('ai_analysis'):
+            return {
+                "case_id": case_id,
+                "insights": case_data['ai_analysis'],
+                "cached": True
+            }
+        
+        # Generate new AI insights using Groq
+        ai_result = await analyze_case_with_groq(
+            case_type=case_data['case_type'],
+            description=case_data['description'],
+            additional_details=case_data.get('additional_details')
+        )
+        
+        # Update case with AI insights
+        supabase.table('cases').update({
+            'ai_analysis': ai_result
+        }).eq('id', case_id).execute()
+        
+        return {
+            "case_id": case_id,
+            "insights": ai_result,
+            "cached": False
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"AI insights generation error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate AI insights: {str(e)}")
+
+
 # ============= CASE LIFECYCLE MANAGEMENT =============
 @api_router.patch("/cases/{case_id}/stage")
 async def update_case_stage(

@@ -44,6 +44,7 @@ const parseCSV = (text) => {
   const rows = lines.slice(1).map(split);
   return { headers, rows };
 };
+
 const ReportsPage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -61,27 +62,30 @@ const ReportsPage = () => {
     return parseCSV(res.data);
   };
 
-  const loadTab = async (tab) => {
-    if (data[tab]) return;
-    setLoading(true);
-    try {
-      if (tab === 'cases') {
-        setData((d) => ({ ...d, cases: await fetchCSV('/admin/reports/cases') }));
-      } else if (tab === 'feedback') {
-        setData((d) => ({ ...d, feedback: await fetchCSV('/admin/reports/feedback') }));
-      } else if (tab === 'revenue') {
-        setData((d) => ({ ...d, revenue: await fetchCSV('/admin/reports/revenue') }));
-      } else if (tab === 'advocates') {
-        const res = await adminAPI.getAllAdvocates({});
-        setData((d) => ({ ...d, users: res.data.advocates || [] }));
-      }
-    } catch (e) {
-      console.error(e);
-      toast({ title: 'Error', description: 'Failed to load data', variant: 'destructive' });
-    } finally {
-      setLoading(false);
+const loadTab = async (tab) => {
+  if (data[tab]) return;
+  setLoading(true);
+  try {
+    if (tab === 'cases') {
+      const casesData = await fetchCSV('/admin/reports/cases');
+      setData((d) => ({ ...d, cases: casesData }));
+    } else if (tab === 'feedback') {
+      const feedbackData = await fetchCSV('/admin/reports/feedback');
+      setData((d) => ({ ...d, feedback: feedbackData }));
+    } else if (tab === 'revenue') {
+      const revenueData = await fetchCSV('/admin/reports/revenue');
+      setData((d) => ({ ...d, revenue: revenueData }));
+    } else if (tab === 'advocates') {
+      const res = await adminAPI.getAllAdvocates({});
+      setData((d) => ({ ...d, users: res.data.advocates || [] }));
     }
-  };
+  } catch (e) {
+    console.error(e);
+    toast({ title: 'Error', description: 'Failed to load data', variant: 'destructive' });
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
     loadTab(activeTab);

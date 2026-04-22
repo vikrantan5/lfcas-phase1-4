@@ -49,7 +49,13 @@ const AllAdvocatesPage = () => {
   const loadAdvocates = async () => {
     try {
       setLoading(true);
-      const response = await adminAPI.getAllAdvocates(filters);
+          // FIX: Remove empty string parameters to avoid 422 error
+      const cleanFilters = {};
+      if (filters.status && filters.status !== '') cleanFilters.status = filters.status;
+      if (filters.location && filters.location !== '') cleanFilters.location = filters.location;
+      if (filters.min_rating && filters.min_rating !== '') cleanFilters.min_rating = filters.min_rating;
+      
+      const response = await adminAPI.getAllAdvocates(cleanFilters);
       setAdvocates(response.data.advocates || []);
     } catch (error) {
       console.error('Failed to load advocates:', error);

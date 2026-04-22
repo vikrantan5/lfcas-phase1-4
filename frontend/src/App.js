@@ -26,6 +26,7 @@ import FindClients from './pages/advocate/FindClients';
 import Settings from './pages/advocate/Settings';
 import ManagerDashboard from './pages/manager/ManagerDashboard';
 import AllAdvocatesPage from './pages/manager/AllAdvocates';
+import ReportsPage from './pages/manager/ReportsPage';
 import VoiceAssistantButton from './components/VoiceAssistantButton';
 import VoiceAssistantModal from './components/VoiceAssistantModal';
 import { Loader2 } from 'lucide-react';
@@ -269,6 +270,15 @@ function App() {
                   </ProtectedRoute>
                 }
               />
+                <Route
+                path="/manager/reports"
+                element={
+                  <ProtectedRoute allowedRoles={['platform_manager']}>
+                    <ReportsPage />
+                  </ProtectedRoute>
+                }
+              />
+
 
               {/* Catch all */}
               <Route path="*" element={<Navigate to="/" replace />} />

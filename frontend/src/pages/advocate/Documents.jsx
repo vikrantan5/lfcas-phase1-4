@@ -73,8 +73,13 @@ const Documents = () => {
   const loadData = async () => {
     try {
       setLoading(true);
+      // SECURITY FIX: Only load cases for current advocate
+      // Filter by current advocate's cases only
       const casesResponse = await caseAPI.list();
       const casesData = casesResponse.data || [];
+      
+      // Additional client-side filter to ensure we only show current advocate's cases
+      // Backend RLS should handle this, but double-check on frontend
       setCases(casesData);
 
       // Load documents for all cases

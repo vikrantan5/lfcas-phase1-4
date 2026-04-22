@@ -182,7 +182,7 @@ const NotificationPanel = ({ darkMode = false }) => {
               <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>No notifications</p>
             </div>
           ) : (
-            <div className="divide-y" className={darkMode ? 'divide-gray-700' : 'divide-gray-100'}>
+               <div className={`divide-y ${darkMode ? 'divide-gray-700' : 'divide-gray-100'}`}>
               {notifications.map((notification) => (
                 <div
                   key={notification.id}

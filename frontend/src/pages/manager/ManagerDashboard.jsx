@@ -182,13 +182,33 @@ const NewAdminDashboard = () => {
     });
   };
 
-  // Prepare pie chart data
-  const pieChartData = stats?.cases?.by_type ? [
-    { name: 'Divorce', value: stats.cases.by_type.divorce || 0, color: '#3B4FAE' },
-    { name: 'Custody', value: stats.cases.by_type.child_custody || 0, color: '#F9C74F' },
-    { name: 'Alimony', value: stats.cases.by_type.alimony || 0, color: '#F94144' },
-    { name: 'Other', value: (stats.cases.by_type.domestic_violence || 0) + (stats.cases.by_type.dowry || 0) + (stats.cases.by_type.other || 0), color: '#43AA8B' }
-  ] : [];
+ // Prepare pie chart data - uses DB enum case_type keys so labels always match
+  const CASE_TYPE_LABELS = {
+    divorce: 'Divorce',
+    child_custody: 'Child Custody',
+    alimony: 'Alimony',
+    domestic_violence: 'Domestic Violence',
+    dowry: 'Dowry',
+    property_dispute: 'Property Dispute',
+    other: 'Other',
+  };
+  const CASE_TYPE_COLORS = {
+    divorce: '#3B4FAE',
+    child_custody: '#F9C74F',
+    alimony: '#F94144',
+    domestic_violence: '#7E57C2',
+    dowry: '#F8961E',
+    property_dispute: '#277DA1',
+    other: '#43AA8B',
+  };
+  const byType = stats?.cases?.by_type || {};
+  const pieChartData = Object.keys(CASE_TYPE_LABELS)
+    .map((key) => ({
+      name: CASE_TYPE_LABELS[key],
+      value: byType[key] || 0,
+      color: CASE_TYPE_COLORS[key],
+    }))
+    .filter((d) => d.value > 0);
 
   const totalCases = pieChartData.reduce((sum, item) => sum + item.value, 0);
 
@@ -583,6 +603,15 @@ const NewAdminDashboard = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
+                      <Button 
+                    variant="default" 
+                    className="w-full justify-start bg-[#3B4FAE] text-white hover:bg-[#2f3f8e]"
+                    onClick={() => navigate('/manager/reports')}
+                    data-testid="view-all-reports-btn"
+                  >
+                    <FileText className="w-4 h-4 mr-2" />
+                    View All Reports (Data Tables)
+                  </Button>
                   <Button 
                     variant="outline" 
                     className="w-full justify-start text-gray-700 hover:bg-gray-50"

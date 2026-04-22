@@ -44,7 +44,26 @@ const FindAdvocates = () => {
           || analysis?.data?.case_classification
           || null;
         if (detectedType) {
-          const normalized = String(detectedType).toLowerCase().replace(/s+/g, '_');
+             // CASE_TYPE_MAP — single source of truth for AI → backend enum
+          const CASE_TYPE_MAP = {
+            'divorce': 'divorce',
+            'child custody': 'child_custody',
+            'child_custody': 'child_custody',
+            'alimony': 'alimony',
+            'alimony / maintenance': 'alimony',
+            'maintenance': 'alimony',
+            'domestic violence': 'domestic_violence',
+            'domestic_violence': 'domestic_violence',
+            'dowry': 'dowry',
+            'property dispute': 'property_dispute',
+            'property_dispute': 'property_dispute',
+            'other': 'other',
+          };
+          const VALID = new Set(Object.values(CASE_TYPE_MAP));
+          const raw = String(detectedType).toLowerCase().trim();
+          // FIX: use \s+ (whitespace), not s+ (letter s) — previous bug corrupted 'property_dispute' → 'property_di_pute'
+          const slug = raw.replace(/\s+/g, '_').replace(/[^a-z_]/g, '');
+          const normalized = CASE_TYPE_MAP[raw] || CASE_TYPE_MAP[slug] || (VALID.has(slug) ? slug : 'other');
           setCaseTypeFromAI(normalized);
           setAiRecommended(true);
           setFilters(prev => ({ ...prev, specialization: normalized }));
@@ -166,6 +185,8 @@ const FindAdvocates = () => {
                 <SelectItem value="child_custody">Child Custody</SelectItem>
                 <SelectItem value="dowry">Dowry</SelectItem>
                 <SelectItem value="domestic_violence">Domestic Violence</SelectItem>
+                  <SelectItem value="property_dispute">Property Dispute</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -363,6 +384,7 @@ const FindAdvocates = () => {
                   <SelectItem value="child_custody">Child Custody</SelectItem>
                   <SelectItem value="dowry">Dowry</SelectItem>
                   <SelectItem value="domestic_violence">Domestic Violence</SelectItem>
+                     <SelectItem value="property_dispute">Property Dispute</SelectItem>
                   <SelectItem value="other">Other</SelectItem>
                 </SelectContent>
               </Select>

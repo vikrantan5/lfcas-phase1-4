@@ -316,29 +316,62 @@ async def create_advocate_profile(
 async def list_advocates(
     status: Optional[AdvocateStatus] = None,
     location: Optional[str] = None,
-    specialization: Optional[CaseType] = None,
+    specialization: Optional[str] = None,
     limit: int = 20
 ):
-    """List advocates with filters"""
+    """List advocates with filters. Ranks by rating then experience (AI-friendly)."""
+    # Normalize & validate specialization to match DB enum case_type
+    VALID_CASE_TYPES = {
+        "divorce", "child_custody", "alimony",
+        "domestic_violence", "dowry", "property_dispute", "other"
+    }
+    SPEC_ALIAS = {
+        "child custody": "child_custody",
+        "alimony / maintenance": "alimony",
+        "maintenance": "alimony",
+        "domestic violence": "domestic_violence",
+        "property dispute": "property_dispute",
+        # Tolerate the known buggy value produced by older frontends
+        "property_di_pute": "property_dispute",
+    }
+    normalized_specialization = None
+    if specialization and specialization.lower() != "all":
+        raw = specialization.strip().lower()
+        normalized_specialization = SPEC_ALIAS.get(raw, raw.replace(" ", "_"))
+        if normalized_specialization not in VALID_CASE_TYPES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid specialization '{specialization}'. Must be one of: {', '.join(sorted(VALID_CASE_TYPES))}"
+            )
+
     query = supabase.table('advocates').select('*, users!inner(*)')
-    
+
     if status:
         query = query.eq('status', status.value)
     if location:
         query = query.ilike('location', f'%{location}%')
-    if specialization:
-        query = query.contains('specializations', [specialization.value])
-    
+    if normalized_specialization:
+        query = query.contains('specializations', [normalized_specialization])
+
     result = query.limit(limit).execute()
-    
+
     advocates = []
-    for adv in result.data:
+    for adv in result.data or []:
         user_data = adv.pop('users', None)
         adv_response = AdvocateResponse(**adv)
         if user_data:
             adv_response.user = UserResponse(**user_data)
         advocates.append(adv_response)
-    
+
+    # AI ranking: rating desc → experience desc → total_cases desc
+    advocates.sort(
+        key=lambda a: (
+            -(a.rating or 0),
+            -(a.experience_years or 0),
+            -(a.total_cases or 0),
+        )
+    )
+
     return advocates
 
 

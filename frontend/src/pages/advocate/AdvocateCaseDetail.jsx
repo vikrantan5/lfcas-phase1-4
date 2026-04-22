@@ -52,7 +52,7 @@ const AdvocateCaseDetail = () => {
 
   // Case Stage Update State
   const [showStageDialog, setShowStageDialog] = useState(false);
-  const [newStage, setNewStage] = useState('');
+const [newStage, setNewStage] = useState(undefined);
   const [stageNotes, setStageNotes] = useState('');
   const [updatingStage, setUpdatingStage] = useState(false);
 

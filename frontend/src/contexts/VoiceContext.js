@@ -37,6 +37,14 @@ export const VoiceProvider = ({ children }) => {
   const synthesisRef = useRef(null);
   const speechQueueRef = useRef([]);
   const isListeningRef = useRef(false);
+    // Sync refs to prevent AI TTS being captured as user input
+  const isAISpeakingRef = useRef(false);
+  const userManuallyStoppedRef = useRef(false);
+
+    // Silence-detection buffer: accumulate speech and flush after 2s of silence
+  const silenceTimerRef = useRef(null);
+  const transcriptBufferRef = useRef('');
+  const SILENCE_MS = 2000;
 
   // Check browser support on mount
   useEffect(() => {
@@ -81,6 +89,12 @@ export const VoiceProvider = ({ children }) => {
     };
 
     recognition.onresult = (event) => {
+      // IGNORE any speech captured while AI is speaking (prevents TTS echo loop)
+      if (isAISpeakingRef.current) {
+        console.log('🚫 Ignoring mic input — AI is currently speaking');
+        return;
+      }
+
       let interimTranscript = '';
       let finalTranscript = '';
 
@@ -93,16 +107,37 @@ export const VoiceProvider = ({ children }) => {
         }
       }
 
-      if (interimTranscript) {
-        setCurrentTranscript(interimTranscript);
+      // Show user speaking indicator + live interim preview
+      if (interimTranscript || finalTranscript) {
         setIsSpeaking(true);
+        setCurrentTranscript(
+          (transcriptBufferRef.current + ' ' + (finalTranscript || interimTranscript)).trim()
+        );
       }
 
+      // When browser marks a chunk as final, append to buffer
       if (finalTranscript) {
-        console.log('📝 Final transcript:', finalTranscript);
-        setIsSpeaking(false);
-        handleUserSpeech(finalTranscript.trim());
+        transcriptBufferRef.current = (
+          transcriptBufferRef.current + ' ' + finalTranscript
+        ).trim();
+        console.log('📝 Buffered (final chunk):', transcriptBufferRef.current);
       }
+
+      // Reset silence timer on every result — flush only after SILENCE_MS of quiet
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+      }
+      silenceTimerRef.current = setTimeout(() => {
+        // Prefer the finalized buffer; fall back to current interim if nothing was finalized
+        const finalText = (transcriptBufferRef.current || interimTranscript || '').trim();
+        if (!finalText) return;
+
+        console.log('⏱️ 2s silence detected — flushing transcript to AI:', finalText);
+        transcriptBufferRef.current = '';
+        setCurrentTranscript('');
+        setIsSpeaking(false);
+        handleUserSpeech(finalText);
+      }, SILENCE_MS);
     };
 
     recognition.onerror = (event) => {
@@ -123,8 +158,30 @@ export const VoiceProvider = ({ children }) => {
 
     recognition.onend = () => {
       console.log('🎤 Speech recognition ended');
-      // Auto-restart if still in recording mode
-      if (isListeningRef.current && session) {
+
+
+           // SAFETY NET: if recognition ends with buffered user speech that hasn't
+      // been sent yet, flush it now so the AI doesn't get stuck silent.
+      const pending = transcriptBufferRef.current.trim();
+      if (pending && !isAISpeakingRef.current) {
+        if (silenceTimerRef.current) {
+          clearTimeout(silenceTimerRef.current);
+          silenceTimerRef.current = null;
+        }
+        transcriptBufferRef.current = '';
+        setCurrentTranscript('');
+        setIsSpeaking(false);
+        console.log('⚡ Flushing buffered transcript on recognition end:', pending);
+        handleUserSpeech(pending);
+      }
+      // Do NOT auto-restart while AI is speaking — prevents TTS feedback loop
+      if (isAISpeakingRef.current) {
+        console.log('⏸️ Recognition ended while AI speaking — will restart after AI finishes');
+        setIsRecording(false);
+        return;
+      }
+      // Auto-restart if still in recording mode and user hasn't manually stopped
+      if (isListeningRef.current && session && !userManuallyStoppedRef.current) {
         console.log('🔄 Restarting speech recognition...');
         try {
           recognition.start();
@@ -142,6 +199,17 @@ export const VoiceProvider = ({ children }) => {
   // Handle user speech - save and get AI response
   const handleUserSpeech = async (transcript) => {
     if (!session || !transcript) return;
+
+
+       // Guard: ignore input captured while AI is speaking (TTS echo protection)
+    if (isAISpeakingRef.current) {
+      console.log('🚫 Dropping transcript — received while AI was speaking:', transcript);
+      return;
+    }
+    // Guard: ignore trivially short transcripts (often noise or partial TTS bleed)
+    if (transcript.trim().length < 2) {
+      return;
+    }
 
     try {
       // Add user message to UI immediately
@@ -240,6 +308,25 @@ export const VoiceProvider = ({ children }) => {
     // Cancel any ongoing speech
     window.speechSynthesis.cancel();
 
+    // CRITICAL: Mark AI as speaking BEFORE starting TTS and stop the mic
+    // so that speech recognition does not capture the AI's own voice.
+    isAISpeakingRef.current = true;
+    setIsAISpeaking(true);
+
+       // Clear any pending silence-flush timer so we don't send stale input
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+    transcriptBufferRef.current = '';
+    try {
+      if (recognitionRef.current && isListeningRef.current) {
+        recognitionRef.current.stop();
+      }
+    } catch (e) {
+      console.log('Stop recognition before TTS failed:', e);
+    }
+
     const utterance = new SpeechSynthesisUtterance(text);
     
     // Language mapping for voices (Bengali removed)
@@ -261,17 +348,32 @@ export const VoiceProvider = ({ children }) => {
 
     utterance.onstart = () => {
       console.log('🔊 AI speaking...');
+      isAISpeakingRef.current = true;
       setIsAISpeaking(true);
     };
 
-    utterance.onend = () => {
+    const handleEnd = () => {
       console.log('🔇 AI finished speaking');
+      isAISpeakingRef.current = false;
       setIsAISpeaking(false);
+      // Small delay so TTS tail-off doesn't leak into mic, then resume listening
+      setTimeout(() => {
+        if (isListeningRef.current && recognitionRef.current && !userManuallyStoppedRef.current) {
+          try {
+            recognitionRef.current.start();
+            console.log('▶️ Recognition resumed after AI speech');
+          } catch (e) {
+            console.log('Recognition already running or failed to resume:', e?.message);
+          }
+        }
+      }, 300);
     };
+
+    utterance.onend = handleEnd;
 
     utterance.onerror = (event) => {
       console.error('Speech synthesis error:', event);
-      setIsAISpeaking(false);
+      handleEnd();
     };
 
     window.speechSynthesis.speak(utterance);
@@ -327,7 +429,10 @@ export const VoiceProvider = ({ children }) => {
       if (recognition) {
         recognitionRef.current = recognition;
         isListeningRef.current = true;
-        recognition.start();
+        userManuallyStoppedRef.current = false;
+        // NOTE: recognition will auto-start AFTER the greeting TTS finishes
+        // (speakText's onend handler restarts recognition). Do NOT start here
+        // otherwise it will capture the AI greeting as user input.
       }
       
       return sessionData;
@@ -341,8 +446,15 @@ export const VoiceProvider = ({ children }) => {
   // Stop speech recognition
   const stopRecording = useCallback(() => {
     isListeningRef.current = false;
+    userManuallyStoppedRef.current = true;
+
+     if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+    transcriptBufferRef.current = '';
     if (recognitionRef.current) {
-      recognitionRef.current.stop();
+      try { recognitionRef.current.stop(); } catch (e) { /* ignore */ }
     }
     setIsRecording(false);
     setIsSpeaking(false);
@@ -353,6 +465,12 @@ export const VoiceProvider = ({ children }) => {
   const startRecording = useCallback(() => {
     if (recognitionRef.current && session) {
       isListeningRef.current = true;
+      userManuallyStoppedRef.current = false;
+      // Don't try to start while AI is speaking — will resume on AI speech end
+      if (isAISpeakingRef.current) {
+        console.log('⏳ AI is speaking, recognition will start after it finishes');
+        return;
+      }
       try {
         recognitionRef.current.start();
         console.log('▶️ Recording resumed');
@@ -366,6 +484,7 @@ export const VoiceProvider = ({ children }) => {
   const stopSpeaking = useCallback(() => {
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
+      isAISpeakingRef.current = false;
       setIsAISpeaking(false);
     }
   }, []);

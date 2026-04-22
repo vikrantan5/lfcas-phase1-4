@@ -3622,7 +3622,6 @@ async def get_voice_session_messages(
     except Exception as e:
         logger.error(f"Error getting session messages: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get messages: {str(e)}")
-
 @api_router.post("/voice/get-next-question")
 async def get_next_question(
     request: dict,
@@ -3654,6 +3653,49 @@ async def get_next_question(
         
         # Count user responses (excluding greeting)
         user_responses = len([msg for msg in conversation_history if msg["role"] == "user"])
+
+        # ---------------------------------------------------------------
+        # LEGAL-ONLY GUARD (AI-BASED, NOT KEYWORDS)
+        # Use Groq to intelligently decide whether this conversation is
+        # about a legal/case matter. If NOT, politely refuse instead of
+        # generating a generic answer. Skip for trivially short inputs
+        # (<= 3 chars) — wait for more context.
+        # ---------------------------------------------------------------
+        if user_message and len(user_message.strip()) > 3:
+            try:
+                # Classify using the whole conversation so context is preserved
+                combined_text = "\n".join(
+                    f"{m['role']}: {m['content']}" for m in conversation_history
+                )
+                intent = await detect_legal_intent(combined_text)
+
+                is_legal = intent.get("is_legal", True)
+                confidence = intent.get("confidence", 0.5) or 0.5
+
+                # Only reject when the AI is confidently NOT legal
+                if is_legal is False and confidence >= 0.6:
+                    refusal = {
+                        "english": "I can only assist with legal or case-related matters (for example: divorce, property, custody, domestic violence, harassment, fraud, etc.). Could you please describe your legal problem?",
+                        "hindi": "मैं केवल कानूनी या केस से जुड़े मामलों में मदद कर सकता हूँ (जैसे तलाक, संपत्ति, हिरासत, घरेलू हिंसा, उत्पीड़न, धोखाधड़ी आदि)। कृपया अपनी कानूनी समस्या बताइए।"
+                    }.get(language, "I can only assist with legal or case-related matters. Please describe your legal problem.")
+
+                    return {
+                        "success": True,
+                        "next_question": refusal,
+                        "ready_to_analyze": False,
+                        "non_legal": True
+                    }
+            except Exception as intent_err:
+                # Fail-open: if the classifier breaks, continue to normal flow
+                logger.warning(f"Legal intent classifier failed, continuing: {intent_err}")
+        
+        # Continue with normal flow - generate next question based on conversation
+        # ... rest of your code here
+        
+    except Exception as e:
+        logger.error(f"Error in get_next_question: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+        
         
         # Determine next question based on conversation stage
         from groq import Groq

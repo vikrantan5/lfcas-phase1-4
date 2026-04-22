@@ -37,7 +37,7 @@ const AllAdvocatesPage = () => {
 
   // Filters
   const [filters, setFilters] = useState({
-    status: '',
+    status: 'all',
     location: '',
     min_rating: ''
   });
@@ -49,9 +49,9 @@ const AllAdvocatesPage = () => {
   const loadAdvocates = async () => {
     try {
       setLoading(true);
-          // FIX: Remove empty string parameters to avoid 422 error
+          // FIX: Remove empty string / \"all\" parameters to avoid 422 error
       const cleanFilters = {};
-      if (filters.status && filters.status !== '') cleanFilters.status = filters.status;
+      if (filters.status && filters.status !== 'all') cleanFilters.status = filters.status;
       if (filters.location && filters.location !== '') cleanFilters.location = filters.location;
       if (filters.min_rating && filters.min_rating !== '') cleanFilters.min_rating = filters.min_rating;
       
@@ -211,7 +211,7 @@ const AllAdvocatesPage = () => {
                     <SelectValue placeholder="All Statuses" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Statuses</SelectItem>
+                    <SelectItem value="all">All Statuses</SelectItem>
                     <SelectItem value="approved">Approved</SelectItem>
                     <SelectItem value="pending_approval">Pending</SelectItem>
                     <SelectItem value="rejected">Rejected</SelectItem>

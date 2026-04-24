@@ -132,23 +132,33 @@ const FindAdvocates = () => {
 
     setRequesting(true);
     try {
+      // Include AI analysis and chat session ID with the request
       await meetingRequestAPI.create({
         advocate_id: selectedAdvocate.id,
         case_type: requestData.case_type,
         description: requestData.description,
         location: requestData.location,
         preferred_date: requestData.preferred_date || null,
-        ai_analysis: null
+        ai_analysis: aiAnalysis || null,  // Send AI analysis to advocate
+        chat_session_id: chatSessionId || null  // Link chat session
       });
-      toast({ title: "Success", description: `Meeting request sent to ${selectedAdvocate.user?.full_name}` });
+      
+      toast({ 
+        title: "✅ Request Sent with AI Summary!", 
+        description: `Your case details and AI analysis have been sent to ${selectedAdvocate.user?.full_name}. The advocate can now review your complete case context.` 
+      });
+      
       setShowRequestDialog(false);
       setRequestData({ case_type: '', description: '', location: '', preferred_date: '' });
+      
+      // Clear the pending analysis from localStorage after successful request
+      localStorage.removeItem('pendingCaseAnalysis');
     } catch (error) {
       toast({ title: "Request Failed", description: error.response?.data?.detail || "Failed to send request", variant: "destructive" });
     } finally {
       setRequesting(false);
     }
-  };
+  }; // <-- THIS WAS THE MISSING CLOSING BRACE
 
   const filteredAdvocates = advocates.filter(adv => {
     const matchesExp = !filters.experience || filters.experience === 'all' || adv.experience_years >= parseInt(filters.experience);

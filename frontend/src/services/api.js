@@ -36,7 +36,7 @@ export const authAPI = {
   register: (data) => api.post('/auth/register', data),
   login: (data) => api.post('/auth/login', data),
   getMe: () => api.get('/auth/me'),
-   updateOnboardingStatus: (completed) => api.patch('/users/onboarding-status', null, { params: { completed } }),
+  updateOnboardingStatus: (completed) => api.patch('/users/onboarding-status', null, { params: { completed } }),
 };
 
 // Advocate APIs
@@ -45,7 +45,7 @@ export const advocateAPI = {
   list: (params) => api.get('/advocates', { params }),
   getById: (id) => api.get(`/advocates/${id}`),
   updateStatus: (id, status) => api.patch(`/advocates/${id}/status`, { new_status: status }),
-    updateProfile: (id, data) => api.patch(`/advocates/${id}`, data),
+  updateProfile: (id, data) => api.patch(`/advocates/${id}`, data),
 };
 
 // AI APIs
@@ -74,26 +74,23 @@ export const meetingAPI = {
 export const caseAPI = {
   list: (params) => api.get('/cases', { params }),
   getById: (id) => api.get(`/cases/${id}`),
-    create: (data) => api.post('/cases/draft', data),
+  create: (data) => api.post('/cases/draft', data),
   updateStage: (id, data) => api.patch(`/cases/${id}/stage`, data),
   getStageHistory: (id) => api.get(`/cases/${id}/stage-history`),
-   getAIInsights: (id, forceRegenerate = false) => api.get(`/cases/${id}/ai-insights`, { params: { force_regenerate: forceRegenerate } }),
+  getAIInsights: (id, forceRegenerate = false) => api.get(`/cases/${id}/ai-insights`, { params: { force_regenerate: forceRegenerate } }),
 };
-
 
 // Client Dashboard API
 export const dashboardAPI = {
   getSummary: () => api.get('/client/dashboard-summary'),
-   getReminders: () => api.get('/client/reminders'),
+  getReminders: () => api.get('/client/reminders'),
   getRecommendedAdvocates: () => api.get('/client/recommended-advocates'),
-   getDownloads: () => api.get('/client/downloads'),
+  getDownloads: () => api.get('/client/downloads'),
   getLegalResources: (category) => api.get('/legal-resources', { params: { category } }),
   getUserProfile: () => api.get('/users/profile'),
   updateUserProfile: (data) => api.patch('/users/profile', data),
   sendAdvocateEmail: (data) => api.post('/client/send-advocate-email', data),
 };
-
-
 
 // Advocate Dashboard API
 export const advocateDashboardAPI = {
@@ -102,6 +99,7 @@ export const advocateDashboardAPI = {
   getTodayHearings: () => api.get('/advocate/today-hearings'),
   getReminders: () => api.get('/advocate/reminders'),
 };
+
 // Hearing APIs
 export const hearingAPI = {
   create: (data) => api.post('/hearings', data),
@@ -114,14 +112,12 @@ export const documentAPI = {
     headers: { 'Content-Type': 'multipart/form-data' },
   }),
   getByCaseId: (caseId) => api.get(`/documents/case/${caseId}`),
-
-    // Document Edit Permission APIs
+  // Document Edit Permission APIs
   createEditRequest: (data) => api.post('/documents/edit-request', data),
   getClientEditRequests: () => api.get('/documents/edit-requests/client'),
   getAdvocateEditRequests: (status) => api.get('/documents/edit-requests/advocate', { params: { status } }),
   updateEditRequest: (requestId, data) => api.patch(`/documents/edit-requests/${requestId}`, data),
   getEditStatus: (documentId) => api.get(`/documents/${documentId}/edit-status`),
-  
   // Document Version APIs
   getVersions: (documentId) => api.get(`/documents/${documentId}/versions`),
   createVersion: (documentId, formData) => api.post(`/documents/${documentId}/versions`, formData, {
@@ -142,10 +138,7 @@ export const notificationAPI = {
   markAsRead: (id) => api.patch(`/notifications/${id}/read`),
 };
 
-
-
-
-// NEW: Chat Session APIs (AI conversation storage + summary)
+// Chat Session APIs (AI conversation storage + summary)
 export const chatSessionAPI = {
   create: (data) => api.post('/chat-sessions', data),
   addMessage: (id, data) => api.patch(`/chat-sessions/${id}/add-message`, data),
@@ -153,12 +146,12 @@ export const chatSessionAPI = {
   getById: (id) => api.get(`/chat-sessions/${id}`),
 };
 
-// NEW: Advocate Recommendation API (AI-matched)
+// Advocate Recommendation API (AI-matched)
 export const advocateRecommendAPI = {
   recommend: (params) => api.get('/advocate-recommendations', { params }),
 };
 
-// NEW: Petition APIs
+// Petition APIs
 export const petitionAPI = {
   create: (formData) => api.post('/petitions', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
@@ -178,75 +171,41 @@ export const ratingAPI = {
 export const adminAPI = {
   getStats: () => api.get('/admin/stats'),
   getLogs: (params) => api.get('/admin/logs', { params }),
-   getTimelineAnalytics: (days = 7) => api.get('/admin/analytics/timeline', { params: { days } }),
+  getTimelineAnalytics: (days = 7) => api.get('/admin/analytics/timeline', { params: { days } }),
   approveAdvocate: (id) => api.patch(`/advocates/${id}/approve`),
   rejectAdvocate: (id, reason) => api.patch(`/advocates/${id}/reject`, null, { params: { reason } }),
   downloadCasesReport: () => api.get('/admin/reports/cases', { responseType: 'blob' }),
   downloadFeedbackReport: () => api.get('/admin/reports/feedback', { responseType: 'blob' }),
   downloadRevenueReport: () => api.get('/admin/reports/revenue', { responseType: 'blob' }),
-
-   // Warnings
+  // Warnings
   createWarning: (advocateId, severity, reason, description) => 
     api.post('/admin/warnings', null, { 
       params: { advocate_id: advocateId, severity, reason, description } 
     }),
   getWarnings: (params) => api.get('/admin/warnings', { params }),
-  
   // View all advocates with ratings
   getAllAdvocates: (params) => api.get('/admin/advocates', { params }),
   getAdvocateDetails: (advocateId) => api.get(`/admin/advocates/${advocateId}/details`),
 };
-
-
 
 // Payment APIs
 export const paymentAPI = {
   // Advocate payment settings
   saveSettings: (data) => api.post('/payments/settings', data),
   getSettings: () => api.get('/payments/settings'),
-  
   // Payment requests
   createRequest: (data) => api.post('/payments/request', data),
   getRequests: (params) => api.get('/payments/requests', { params }),
   getRequestById: (id) => api.get(`/payments/requests/${id}`),
-  
   // Payment verification
   verify: (data) => api.post('/payments/verify', data),
-  
   // Advocate key lookup for clients
   getAdvocateKey: (advocateId) => api.get(`/payments/advocate-key/${advocateId}`),
 };
 
-
-
-// Chat Session APIs (NEW)
-export const chatSessionAPI = {
-  create: (data) => api.post('/chat-sessions', data),
-  addMessage: (sessionId, message) => api.patch(`/chat-sessions/${sessionId}/add-message`, message),
-  analyze: (sessionId) => api.post(`/chat-sessions/${sessionId}/analyze`),
-  get: (sessionId) => api.get(`/chat-sessions/${sessionId}`),
-};
-
-// Advocate Recommendation APIs (NEW)
+// Advocate Recommendation API (alternative name - keep only one)
 export const advocateRecommendationAPI = {
   getRecommendations: (params) => api.get('/advocate-recommendations', { params }),
-};
-
-// Petition APIs (NEW)
-export const petitionAPI = {
-  create: (data) => {
-    const formData = new FormData();
-    formData.append('case_id', data.case_id);
-    formData.append('title', data.title);
-    if (data.description) formData.append('description', data.description);
-    formData.append('file', data.file);
-    return api.post('/petitions', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    });
-  },
-  submit: (petitionId) => api.patch(`/petitions/${petitionId}/submit`),
-  listByCase: (caseId) => api.get(`/petitions/case/${caseId}`),
-  getById: (petitionId) => api.get(`/petitions/${petitionId}`),
 };
 
 export default api;

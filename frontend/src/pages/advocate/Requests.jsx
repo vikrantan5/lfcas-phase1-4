@@ -233,6 +233,59 @@ const Requests = () => {
                       <p style={{ fontSize: 14, color: '#666', lineHeight: 1.6, margin: 0 }}>
                         {req.description}
                       </p>
+
+                          {/* AI Analysis Summary Section */}
+                      {req.ai_analysis && (
+                        <div style={{ 
+                          marginTop: 16, 
+                          padding: 16, 
+                          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
+                          borderRadius: 12,
+                          color: '#fff'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                            <div style={{ 
+                              width: 32, 
+                              height: 32, 
+                              background: 'rgba(255,255,255,0.2)', 
+                              borderRadius: '50%', 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              justifyContent: 'center' 
+                            }}>
+                              🤖
+                            </div>
+                            <h4 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>AI Case Analysis</h4>
+                          </div>
+                          {req.ai_analysis.summary && (
+                            <p style={{ fontSize: 13, lineHeight: 1.6, margin: '0 0 12px 0', opacity: 0.95 }}>
+                              <strong>Summary:</strong> {req.ai_analysis.summary}
+                            </p>
+                          )}
+                          {req.ai_analysis.key_issues && req.ai_analysis.key_issues.length > 0 && (
+                            <div style={{ marginBottom: 12 }}>
+                              <strong style={{ fontSize: 12 }}>Key Issues:</strong>
+                              <ul style={{ margin: '6px 0 0 0', paddingLeft: 20, fontSize: 13 }}>
+                                {req.ai_analysis.key_issues.map((issue, idx) => (
+                                  <li key={idx} style={{ marginBottom: 4 }}>{issue}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {req.ai_analysis.urgency_level && (
+                            <div style={{ 
+                              display: 'inline-block',
+                              padding: '4px 12px', 
+                              background: 'rgba(255,255,255,0.2)', 
+                              borderRadius: 20, 
+                              fontSize: 12,
+                              fontWeight: 600
+                            }}>
+                              Urgency: {req.ai_analysis.urgency_level.toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                     {req.status === 'pending' && (
                       <div style={{ display: 'flex', gap: 8, marginLeft: 16 }}>

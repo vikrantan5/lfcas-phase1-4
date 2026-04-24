@@ -217,4 +217,36 @@ export const paymentAPI = {
   getAdvocateKey: (advocateId) => api.get(`/payments/advocate-key/${advocateId}`),
 };
 
+
+
+// Chat Session APIs (NEW)
+export const chatSessionAPI = {
+  create: (data) => api.post('/chat-sessions', data),
+  addMessage: (sessionId, message) => api.patch(`/chat-sessions/${sessionId}/add-message`, message),
+  analyze: (sessionId) => api.post(`/chat-sessions/${sessionId}/analyze`),
+  get: (sessionId) => api.get(`/chat-sessions/${sessionId}`),
+};
+
+// Advocate Recommendation APIs (NEW)
+export const advocateRecommendationAPI = {
+  getRecommendations: (params) => api.get('/advocate-recommendations', { params }),
+};
+
+// Petition APIs (NEW)
+export const petitionAPI = {
+  create: (data) => {
+    const formData = new FormData();
+    formData.append('case_id', data.case_id);
+    formData.append('title', data.title);
+    if (data.description) formData.append('description', data.description);
+    formData.append('file', data.file);
+    return api.post('/petitions', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+  submit: (petitionId) => api.patch(`/petitions/${petitionId}/submit`),
+  listByCase: (caseId) => api.get(`/petitions/case/${caseId}`),
+  getById: (petitionId) => api.get(`/petitions/${petitionId}`),
+};
+
 export default api;

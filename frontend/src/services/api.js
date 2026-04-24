@@ -142,6 +142,32 @@ export const notificationAPI = {
   markAsRead: (id) => api.patch(`/notifications/${id}/read`),
 };
 
+
+
+
+// NEW: Chat Session APIs (AI conversation storage + summary)
+export const chatSessionAPI = {
+  create: (data) => api.post('/chat-sessions', data),
+  addMessage: (id, data) => api.patch(`/chat-sessions/${id}/add-message`, data),
+  analyze: (id) => api.post(`/chat-sessions/${id}/analyze`),
+  getById: (id) => api.get(`/chat-sessions/${id}`),
+};
+
+// NEW: Advocate Recommendation API (AI-matched)
+export const advocateRecommendAPI = {
+  recommend: (params) => api.get('/advocate-recommendations', { params }),
+};
+
+// NEW: Petition APIs
+export const petitionAPI = {
+  create: (formData) => api.post('/petitions', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+  submit: (id) => api.patch(`/petitions/${id}/submit`),
+  listByCase: (caseId) => api.get(`/petitions/case/${caseId}`),
+  getById: (id) => api.get(`/petitions/${id}`),
+};
+
 // Rating APIs
 export const ratingAPI = {
   create: (data) => api.post('/ratings', data),

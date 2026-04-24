@@ -9,7 +9,7 @@ import {
   AlertCircle, VolumeX, Scale
 } from 'lucide-react';
 import { Button } from '../../components/ui/button';
-import { caseAPI, authAPI } from '../../services/api';
+import { caseAPI, authAPI, chatSessionAPI } from '../../services/api';
 import { useToast } from '../../hooks/use-toast';
 import LanguageSelector from '../../components/LanguageSelector';
 import VoiceWaveAnimation from '../../components/VoiceWaveAnimation';
@@ -142,10 +142,31 @@ const AIOnboarding = () => {
       await authAPI.updateOnboardingStatus(true);
       await updateUser();
 
-      // Store analysis in localStorage for advocate selection page
+      // NEW: Save chat conversation to backend & generate AI summary for advocates
+      let chatSessionId = null;
+      let chatSummary = null;
+      try {
+        const created = await chatSessionAPI.create({});
+        chatSessionId = created.data.id;
+        // Push all messages
+        for (const m of messages) {
+          await chatSessionAPI.addMessage(chatSessionId, {
+            role: m.sender === 'user' ? 'user' : 'ai',
+            content: m.message
+          });
+        }
+        const analyzed = await chatSessionAPI.analyze(chatSessionId);
+        chatSummary = analyzed.data.analysis;
+      } catch (err) {
+        console.warn('Chat session save failed (non-blocking):', err);
+      }
+
+      // Store analysis + chat session for advocate selection page
       localStorage.setItem('pendingCaseAnalysis', JSON.stringify({
         analysis: analysis,
         conversationMessages: messages,
+        chat_session_id: chatSessionId,
+        chat_summary: chatSummary,
         timestamp: new Date().toISOString()
       }));
 

@@ -218,6 +218,7 @@ class MeetingRequestResponse(BaseModel):
     ai_analysis: Optional[Dict[str, Any]] = None
     status: str
     rejection_reason: Optional[str] = None
+    chat_session_id: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
     client: Optional[UserResponse] = None

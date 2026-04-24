@@ -4537,6 +4537,10 @@ async def get_legal_resources(category: str = "all"):
 # Include router
 app.include_router(api_router)
 
+# NEW: Chat Sessions, Advocate Recommendations, Petitions
+from chat_petition_routes import router as chat_petition_router
+app.include_router(chat_petition_router)
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,

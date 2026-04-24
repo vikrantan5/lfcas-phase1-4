@@ -185,6 +185,7 @@ class MeetingRequestCreate(BaseModel):
     location: str
     preferred_date: Optional[datetime] = None
     ai_analysis: Optional[Dict[str, Any]] = None
+    chat_session_id: Optional[str] = None  # NEW: Link to chat session
 
 
 class MeetingRequest(BaseModel):
@@ -475,6 +476,118 @@ class GroqAILog(BaseModel):
     response: Dict[str, Any]
     tokens_used: Optional[int] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+
+
+
+
+# ============= CHAT SESSION MODELS =============
+class ChatMessage(BaseModel):
+    """Individual message in a chat session"""
+    role: str  # "user" or "ai"
+    content: str
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ChatSessionCreate(BaseModel):
+    """Create a new chat session"""
+    initial_message: Optional[str] = None
+
+
+class ChatSessionAddMessage(BaseModel):
+    """Add a message to existing chat session"""
+    role: str  # "user" or "ai"
+    content: str
+
+
+class ChatSessionAnalyze(BaseModel):
+    """Request to analyze chat and generate summary"""
+    case_type: Optional[CaseType] = None
+    location: Optional[str] = None
+
+
+class ChatSession(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    messages: List[Dict[str, Any]] = Field(default_factory=list)  # Array of {role, content, timestamp}
+    detected_case_type: Optional[str] = None
+    summary: Optional[str] = None
+    key_issues: List[str] = Field(default_factory=list)
+    urgency_level: str = "medium"
+    ai_response: Optional[Dict[str, Any]] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ChatSessionResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str
+    user_id: str
+    messages: List[Dict[str, Any]]
+    detected_case_type: Optional[str] = None
+    summary: Optional[str] = None
+    key_issues: List[str] = Field(default_factory=list)
+    urgency_level: str
+    ai_response: Optional[Dict[str, Any]] = None
+    created_at: datetime
+    updated_at: datetime
+    recommended_advocates: Optional[List[AdvocateResponse]] = None
+
+
+# ============= PETITION MODELS =============
+class PetitionStatus(str, Enum):
+    DRAFT = "draft"
+    SUBMITTED = "submitted"
+
+
+class PetitionCreate(BaseModel):
+    """Create a new petition"""
+    case_id: str
+    title: str
+    description: Optional[str] = None
+
+
+class PetitionSubmit(BaseModel):
+    """Submit a petition (change status from draft to submitted)"""
+    pass  # No additional fields needed
+
+
+class Petition(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    case_id: str
+    advocate_id: str  # advocate's user_id
+    title: str
+    description: Optional[str] = None
+    document_url: str
+    document_public_id: str
+    status: PetitionStatus = PetitionStatus.DRAFT
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    submitted_at: Optional[datetime] = None
+
+
+class PetitionResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str
+    case_id: str
+    advocate_id: str
+    title: str
+    description: Optional[str] = None
+    document_url: str
+    document_public_id: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    submitted_at: Optional[datetime] = None
+    case: Optional[CaseResponse] = None
+    advocate: Optional[UserResponse] = None
 
 
 # ============= AI QUERY MODELS =============

@@ -37,7 +37,11 @@ from models import (
     # Document edit permission models
     DocumentEditRequest, DocumentEditRequestCreate, DocumentEditRequestResponse,
     DocumentEditRequestUpdate, DocumentEditStatus, DocumentVersion, DocumentVersionCreate,
-    DocumentWithEditPermission
+    DocumentWithEditPermission,
+    # NEW: Chat Session models
+    ChatSession, ChatSessionCreate, ChatSessionAddMessage, ChatSessionAnalyze, ChatSessionResponse,
+    # NEW: Petition models
+    Petition, PetitionCreate, PetitionSubmit, PetitionResponse, PetitionStatus
 )
 from pydantic import BaseModel
 
@@ -571,6 +575,7 @@ async def create_meeting_request(
         "location": request_data.location,
         "preferred_date": request_data.preferred_date.isoformat() if request_data.preferred_date else None,
         "ai_analysis": request_data.ai_analysis,
+        "chat_session_id": request_data.chat_session_id,  # NEW: Store chat session link
         "status": MeetingRequestStatus.PENDING
     }
     

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSocket } from '../../contexts/SocketContext';
-import { caseAPI, documentAPI, hearingAPI, messageAPI, paymentAPI } from '../../services/api';
+import { caseAPI, documentAPI, hearingAPI, messageAPI, paymentAPI, petitionAPI } from '../../services/api';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
@@ -19,6 +19,8 @@ import {
 import { useToast } from '../../hooks/use-toast';
 import Sidebar from '../../components/advocate/Sidebar';
 import DashboardHeader from '../../components/advocate/DashboardHeader';
+import PetitionForm from '../../components/advocate/PetitionForm';
+import PetitionList from '../../components/petition/PetitionList';
 import '../../styles/advocate-dashboard.css';
 
 const AdvocateCaseDetail = () => {
@@ -34,6 +36,7 @@ const AdvocateCaseDetail = () => {
   const [hearings, setHearings] = useState([]);
   const [messages, setMessages] = useState([]);
   const [stageHistory, setStageHistory] = useState([]);
+    const [petitions, setPetitions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   const [uploading, setUploading] = useState(false);
@@ -116,12 +119,13 @@ const [newStage, setNewStage] = useState(undefined);
 
   const loadCaseDetails = async () => {
     try {
-      const [caseRes, docsRes, hearingsRes, messagesRes, historyRes] = await Promise.all([
+      const [caseRes, docsRes, hearingsRes, messagesRes, historyRes, petitionsRes] = await Promise.all([
         caseAPI.getById(caseId),
         documentAPI.getByCaseId(caseId),
         hearingAPI.getByCaseId(caseId),
         messageAPI.getByCaseId(caseId),
-        caseAPI.getStageHistory(caseId).catch(() => ({ data: [] }))
+        caseAPI.getStageHistory(caseId).catch(() => ({ data: [] })),
+        petitionAPI.listByCase(caseId).catch(() => ({ data: [] }))
       ]);
 
       setCaseData(caseRes.data);
@@ -129,6 +133,7 @@ const [newStage, setNewStage] = useState(undefined);
       setHearings(hearingsRes.data || []);
       setMessages(messagesRes.data || []);
       setStageHistory(historyRes.data || []);
+      setPetitions(petitionsRes.data || []);
     } catch (error) {
       console.error('Failed to load case details:', error);
       toast({
@@ -427,7 +432,7 @@ const [newStage, setNewStage] = useState(undefined);
                   disabled={!caseData.client?.phone}
                   onClick={() => {
                     const phone = (caseData.client?.phone || '').replace(/[^0-9+]/g, '');
-                   if (phone) window.open(`https://wa.me/${phone.replace(/^\+/, '')}`, '_blank');
+                   if (phone) window.open(`https://wa.me/${phone.replace(/^+/, '')}`, '_blank');
                   }}
                   data-testid="send-message-btn"
                   className="border-green-600 text-green-700 hover:bg-green-50"
@@ -456,10 +461,14 @@ const [newStage, setNewStage] = useState(undefined);
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="overview">
               <FileText className="w-4 h-4 mr-2" />
               Overview
+            </TabsTrigger>
+            <TabsTrigger value="petitions">
+              <Scale className="w-4 h-4 mr-2" />
+              Petitions ({petitions.length})
             </TabsTrigger>
             <TabsTrigger value="documents">
               <Upload className="w-4 h-4 mr-2" />

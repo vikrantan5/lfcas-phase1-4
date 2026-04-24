@@ -432,7 +432,7 @@ const [newStage, setNewStage] = useState(undefined);
                   disabled={!caseData.client?.phone}
                   onClick={() => {
                     const phone = (caseData.client?.phone || '').replace(/[^0-9+]/g, '');
-                   if (phone) window.open(`https://wa.me/${phone.replace(/^+/, '')}`, '_blank');
+                  if (phone) window.open(`https://wa.me/${phone.replace(/^\+/, '')}`, '_blank');
                   }}
                   data-testid="send-message-btn"
                   className="border-green-600 text-green-700 hover:bg-green-50"

@@ -5,7 +5,7 @@ import NotificationDropdown from './NotificationDropdown';
 import { useAuth } from '../../contexts/AuthContext';
 import { getAvatarUrl, handleAvatarError } from '../../lib/utils';
 
-const DashboardHeader = ({ onToggleSidebar, userName = 'Rahul Sharma' }) => {
+const DashboardHeader = ({ onToggleSidebar, userName = '👋' }) => {
   const { user, logout } = useAuth();
   const avatarUrl = getAvatarUrl(user, { size: 40 });
 

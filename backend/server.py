@@ -1045,21 +1045,30 @@ async def get_case(
     current_user: dict = Depends(get_current_user)
 ):
     """Get case details"""
+    logger.info(f"GET /cases/{case_id} - User: {current_user['user_id']}, Role: {current_user.get('role')}")
+    
     result = supabase.table('cases').select('*, client:users!cases_client_id_fkey(*), advocate:advocates!cases_advocate_id_fkey(*, users(*))').eq('id', case_id).execute()
     
+    logger.info(f"Supabase query result for case {case_id}: data={bool(result.data)}, count={len(result.data) if result.data else 0}")
+    
     if not result.data or len(result.data) == 0:
+        logger.error(f"Case {case_id} not found in database")
         raise HTTPException(status_code=404, detail="Case not found")
     
     case = result.data[0]
+    logger.info(f"Case {case_id} found: client_id={case.get('client_id')}, advocate_id={case.get('advocate_id')}")
+    
     client_data = case.pop('client', None)
     advocate_data = case.pop('advocate', None)
     
     # Check access permissions
     if current_user["role"] == UserRole.CLIENT and case["client_id"] != current_user["user_id"]:
+        logger.warning(f"Access denied for client {current_user['user_id']} to case {case_id}")
         raise HTTPException(status_code=403, detail="Access denied")
     elif current_user["role"] == UserRole.ADVOCATE:
         adv_profile = supabase.table('advocates').select('id').eq('user_id', current_user["user_id"]).execute()
         if not adv_profile.data or adv_profile.data[0]['id'] != case.get("advocate_id"):
+            logger.warning(f"Access denied for advocate {current_user['user_id']} to case {case_id}")
             raise HTTPException(status_code=403, detail="Access denied")
     
     case_response = CaseResponse(**case)
@@ -1073,8 +1082,8 @@ async def get_case(
             adv_response.user = UserResponse(**user_data)
         case_response.advocate = adv_response
     
+    logger.info(f"Successfully retrieved case {case_id}")
     return case_response
-
 
 
 
@@ -1287,7 +1296,8 @@ async def get_case_hearings(
     
     result = supabase.table('hearings').select('*').eq('case_id', case_id).order('hearing_date').execute()
     
-    return [Hearing(**h) for h in result.data]
+ # Return empty array if no hearings, don't throw 404
+    return [Hearing(**h) for h in (result.data or [])]
 
 
 # ============= DOCUMENT ENDPOINTS =============
@@ -1396,7 +1406,8 @@ async def get_case_documents(
     
     result = supabase.table('documents').select('*').eq('case_id', case_id).order('created_at', desc=True).execute()
     
-    return [Document(**d) for d in result.data]
+ # Return empty array if no documents, don't throw 404
+    return [Document(**d) for d in (result.data or [])]
 
 
 
@@ -1842,10 +1853,12 @@ async def get_case_messages(
     
     result = supabase.table('messages').select('*').eq('case_id', case_id).order('created_at').execute()
     
-    # Mark messages as read
-    supabase.table('messages').update({"is_read": True}).eq('case_id', case_id).eq('receiver_id', current_user["user_id"]).execute()
+   # Mark messages as read
+    if result.data and len(result.data) > 0:
+        supabase.table('messages').update({"is_read": True}).eq('case_id', case_id).eq('receiver_id', current_user["user_id"]).execute()
     
-    return [Message(**m) for m in result.data]
+    # Return empty array if no messages, don't throw 404
+    return [Message(**m) for m in (result.data or [])]
 
 
 @api_router.get("/messages/meeting-request/{request_id}", response_model=List[Message])
@@ -3802,7 +3815,20 @@ Make the conversation feel like talking to a real human lawyer who:
 
 CURRENT USER RESPONSES COUNT: {user_responses}
 
-After about 4-6 meaningful exchanges, when you have enough information (case type, duration, location, basic details), include "READY_TO_ANALYZE" at the very end of your response.
+**CRITICAL: ASK MAXIMUM 3-4 QUESTIONS ONLY**
+- After 3-4 meaningful exchanges, you MUST include \"READY_TO_ANALYZE\" at the end
+- Focus ONLY on: case type, key details, location, urgency
+- DO NOT ask unnecessary follow-ups
+- BE CONCISE and get to the point quickly
+
+After about 3-4 exchanges (MAX), when you have:
+1. Case type (divorce/custody/violence/property etc)
+2. Basic situation (1-2 key facts)
+3. Location
+4. Urgency level
+
+Include "READY_TO_ANALYZE" at the very end of your response to finish the conversation.
+
 
 ---
 
@@ -3820,8 +3846,8 @@ Now respond naturally to the following user input:
         
         next_question = response.choices[0].message.content
         
-        # Check if AI thinks we have enough information
-        ready_to_analyze = "READY_TO_ANALYZE" in next_question or user_responses >= 5
+           # Check if AI thinks we have enough information - stricter threshold for 3-4 questions
+        ready_to_analyze = "READY_TO_ANALYZE" in next_question or user_responses >= 4
         
         if ready_to_analyze:
             # Remove the READY_TO_ANALYZE marker if present
@@ -4585,6 +4611,50 @@ async def shutdown_event():
 
 
 
+@api_router.post("/reminders")
+async def create_reminder(
+    reminder_data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Create a reminder for a hearing or meeting"""
+    try:
+        logger.info(f"Creating reminder for user {current_user['user_id']}: {reminder_data}")
+        
+        # Validate required fields
+        if not reminder_data.get("case_id"):
+            raise HTTPException(status_code=400, detail="case_id is required")
+        
+        if not reminder_data.get("reminder_time"):
+            raise HTTPException(status_code=400, detail="reminder_time is required")
+        
+        # Create notification for the reminder
+        notification_data = {
+            "user_id": current_user["user_id"],
+            "notification_type": NotificationType.SYSTEM,
+            "title": "Reminder Set",
+            "message": f"Reminder set for {reminder_data.get('reminder_time')}",
+            "reference_id": reminder_data.get("hearing_id") or reminder_data.get("case_id"),
+            "reference_type": "hearing" if reminder_data.get("hearing_id") else "case"
+        }
+        
+        result = supabase.table('notifications').insert(notification_data).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=500, detail="Failed to create reminder")
+        
+        logger.info(f"Reminder created successfully: {result.data[0]['id']}")
+        
+        return {
+            "success": True,
+            "message": "Reminder set successfully",
+            "reminder": result.data[0]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating reminder: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create reminder: {str(e)}")
 
 
 

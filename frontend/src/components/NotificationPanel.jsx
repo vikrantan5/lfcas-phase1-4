@@ -92,14 +92,32 @@ const NotificationPanel = ({ darkMode = false }) => {
 
     // Navigate based on notification type
     const userRole = user?.role;
-    const relatedId = notification.related_id;
+    const relatedId = notification.reference_id || notification.related_id;
+
+    console.log('Notification click:', { 
+      type: notification.notification_type, 
+      relatedId, 
+      userRole,
+      referenceType: notification.reference_type 
+    });
+
+    // If no related ID and it's a case-related notification, try to navigate to dashboard
+    if (!relatedId && (notification.notification_type === 'case_update' || notification.notification_type === 'case_approved')) {
+      console.warn('No related_id for case notification, navigating to dashboard');
+      if (userRole === 'client') {
+        navigate('/client/dashboard');
+      } else if (userRole === 'advocate') {
+        navigate('/advocate/dashboard');
+      }
+      return;
+    }
 
     switch (notification.notification_type) {
       case 'case_update':
       case 'case_approved':
-        if (userRole === 'client') {
+        if (userRole === 'client' && relatedId) {
           navigate(`/client/cases/${relatedId}`);
-        } else if (userRole === 'advocate') {
+        } else if (userRole === 'advocate' && relatedId) {
           navigate(`/advocate/cases/${relatedId}`);
         }
         break;

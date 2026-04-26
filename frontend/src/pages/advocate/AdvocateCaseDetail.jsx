@@ -119,26 +119,34 @@ const [newStage, setNewStage] = useState(undefined);
 
   const loadCaseDetails = async () => {
     try {
-      const [caseRes, docsRes, hearingsRes, messagesRes, historyRes, petitionsRes] = await Promise.all([
-        caseAPI.getById(caseId),
+      // Case must load first — without it, sub-resources (which 404 if the
+      // case doesn't exist) will spam errors. If case fails, render the
+      // not-found state instead of trying to fetch every related resource.
+      const caseRes = await caseAPI.getById(caseId);
+      setCaseData(caseRes.data);
+
+      const [docsRes, hearingsRes, messagesRes, historyRes, petitionsRes] = await Promise.allSettled([
         documentAPI.getByCaseId(caseId),
         hearingAPI.getByCaseId(caseId),
         messageAPI.getByCaseId(caseId),
-        caseAPI.getStageHistory(caseId).catch(() => ({ data: [] })),
-        petitionAPI.listByCase(caseId).catch(() => ({ data: [] }))
+        caseAPI.getStageHistory(caseId),
+        petitionAPI.listByCase(caseId)
       ]);
-
-      setCaseData(caseRes.data);
-      setDocuments(docsRes.data || []);
-      setHearings(hearingsRes.data || []);
-      setMessages(messagesRes.data || []);
-      setStageHistory(historyRes.data || []);
-      setPetitions(petitionsRes.data || []);
+      const pick = (r) => (r.status === 'fulfilled' ? (r.value.data || []) : []);
+      setDocuments(pick(docsRes));
+      setHearings(pick(hearingsRes));
+      setMessages(pick(messagesRes));
+      setStageHistory(pick(historyRes));
+      setPetitions(pick(petitionsRes));
     } catch (error) {
       console.error('Failed to load case details:', error);
+      const status = error?.response?.status;
       toast({
-        title: "Error",
-        description: "Failed to load case details",
+        title: status === 404 ? "Case not found" : "Error",
+        description:
+          status === 404
+            ? "This case is no longer available. It may have been removed."
+            : "Failed to load case details",
         variant: "destructive"
       });
     } finally {

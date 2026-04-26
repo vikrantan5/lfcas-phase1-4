@@ -101,6 +101,38 @@ const NotificationPanel = ({ darkMode = false }) => {
       referenceType: notification.reference_type 
     });
 
+
+    
+    // Helper: validate that a case still exists before navigating to it.
+    // If the case has been deleted, the notification is stale — fall back
+    // to the dashboard and inform the user instead of opening a 404 page.
+    const safeNavigateToCase = async (caseId, role) => {
+      if (!caseId) {
+        navigate(role === 'client' ? '/client/dashboard' : '/advocate/dashboard');
+        return;
+      }
+      try {
+        const token = localStorage.getItem('token');
+        const API = process.env.REACT_APP_BACKEND_URL;
+        const resp = await fetch(`${API}/api/cases/${caseId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (resp.ok) {
+          navigate(role === 'client' ? `/client/cases/${caseId}` : `/advocate/cases/${caseId}`);
+        } else {
+          toast({
+            title: 'Case unavailable',
+            description: 'This case is no longer available. It may have been removed.',
+            variant: 'destructive'
+          });
+          navigate(role === 'client' ? '/client/dashboard' : '/advocate/dashboard');
+        }
+      } catch (e) {
+        navigate(role === 'client' ? '/client/dashboard' : '/advocate/dashboard');
+      }
+    };
+
+
     // If no related ID and it's a case-related notification, try to navigate to dashboard
     if (!relatedId && (notification.notification_type === 'case_update' || notification.notification_type === 'case_approved')) {
       console.warn('No related_id for case notification, navigating to dashboard');
@@ -115,11 +147,7 @@ const NotificationPanel = ({ darkMode = false }) => {
     switch (notification.notification_type) {
       case 'case_update':
       case 'case_approved':
-        if (userRole === 'client' && relatedId) {
-          navigate(`/client/cases/${relatedId}`);
-        } else if (userRole === 'advocate' && relatedId) {
-          navigate(`/advocate/cases/${relatedId}`);
-        }
+       await safeNavigateToCase(relatedId, userRole);
         break;
 
       case 'meeting_requested':

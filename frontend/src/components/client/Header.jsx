@@ -5,7 +5,12 @@ import { getAvatarUrl, handleAvatarError } from '../../lib/utils';
 
 const Header = ({ onToggleSidebar, userName }) => {
   const { user } = useAuth();
-  const displayName = userName || user?.full_name || 'User';
+  const displayName =
+    userName ||
+    user?.full_name ||
+    user?.name ||
+    (user?.email ? user.email.split('@')[0] : '') ||
+    'User';
   const avatarUrl = getAvatarUrl(user || { full_name: displayName }, { size: 72, background: '3B82F6', color: 'fff' });
 
   return (

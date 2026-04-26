@@ -89,28 +89,35 @@ const CaseDetailPage = () => {
 
   const loadCaseDetails = async () => {
     try {
-      const [caseRes, docsRes, hearingsRes, messagesRes] = await Promise.all([
-        caseAPI.getById(caseId),
+      // Load case first — if it fails, the sub-resources are pointless
+      const caseRes = await caseAPI.getById(caseId);
+      setCaseData(caseRes.data);
+
+      // Load sub-resources independently. Any 404 (case has no docs/messages
+      // /hearings yet, or these endpoints are guarded) MUST NOT block the
+      // page — fall back to empty arrays.
+      const [docsRes, hearingsRes, messagesRes] = await Promise.allSettled([
         documentAPI.getByCaseId(caseId),
         hearingAPI.getByCaseId(caseId),
         messageAPI.getByCaseId(caseId)
       ]);
-
-      setCaseData(caseRes.data);
-      setDocuments(docsRes.data || []);
-      setHearings(hearingsRes.data || []);
-      setMessages(messagesRes.data || []);
+      setDocuments(docsRes.status === 'fulfilled' ? (docsRes.value.data || []) : []);
+      setHearings(hearingsRes.status === 'fulfilled' ? (hearingsRes.value.data || []) : []);
+      setMessages(messagesRes.status === 'fulfilled' ? (messagesRes.value.data || []) : []);
 
       // Load advocates if case is pending
       if (caseRes.data.status === 'pending' && user?.role === 'client') {
-        const advocatesRes = await advocateAPI.list({
-          specialization: caseRes.data.case_type,
-          location: caseRes.data.location
-        });
-        setAdvocates(advocatesRes.data || []);
+        try {
+          const advocatesRes = await advocateAPI.list({
+            specialization: caseRes.data.case_type,
+            location: caseRes.data.location
+          });
+          setAdvocates(advocatesRes.data || []);
+        } catch (_) { setAdvocates([]); }
       }
     } catch (error) {
       console.error('Failed to load case details:', error);
+      // Leave caseData null — the not-found UI will render
     } finally {
       setLoading(false);
     }

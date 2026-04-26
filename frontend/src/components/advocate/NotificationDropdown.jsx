@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Bell, X, Check, Clock, AlertCircle, Calendar, FileText, MessageSquare, Loader2 } from 'lucide-react';
 import { notificationAPI } from '../../services/api';
 import { useNavigate } from 'react-router-dom';
+import { useToast } from '../../hooks/use-toast';
 
 const NotificationDropdown = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -10,6 +11,7 @@ const NotificationDropdown = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   useEffect(() => {
     loadNotifications();
@@ -60,18 +62,59 @@ const NotificationDropdown = () => {
       await handleMarkAsRead(notification.id);
     }
     
-    // Navigate based on notification type
-    if (notification.related_id) {
-      const type = notification.notification_type;
-      if (type?.includes('case') || type?.includes('CASE')) {
-        navigate(`/advocate/cases/${notification.related_id}`);
-      } else if (type?.includes('meeting') || type?.includes('MEETING')) {
-        navigate('/advocate/requests');
-      } else if (type?.includes('document') || type?.includes('DOCUMENT')) {
-        navigate('/advocate/documents');
-      }
-    }
     setIsOpen(false);
+    
+    // Navigate based on notification type. Use reference_id (preferred) or related_id.
+    const relatedId = notification.reference_id || notification.related_id;
+    const type = notification.notification_type;
+
+    // Helper: validate case before navigating to detail page (avoid 404 spam)
+    const safeNavigateToCase = async (caseId) => {
+      if (!caseId) {
+        navigate('/advocate/dashboard');
+        return;
+      }
+      try {
+        const token = localStorage.getItem('token');
+        const API = process.env.REACT_APP_BACKEND_URL;
+        const resp = await fetch(`${API}/api/cases/${caseId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (resp.ok) {
+          navigate(`/advocate/cases/${caseId}`);
+        } else {
+          toast({
+            title: 'Case unavailable',
+            description: 'This case is no longer available. It may have been removed.',
+            variant: 'destructive'
+          });
+          navigate('/advocate/dashboard');
+        }
+      } catch (e) {
+        navigate('/advocate/dashboard');
+      }
+    };
+
+    if (relatedId && (type?.includes('case') || type?.includes('CASE'))) {
+      await safeNavigateToCase(relatedId);
+    } else if (type?.includes('meeting') || type?.includes('MEETING')) {
+      navigate('/advocate/requests');
+    } else if (type?.includes('document') || type?.includes('DOCUMENT')) {
+      navigate('/advocate/documents');
+    } else if (type?.includes('petition')) {
+      navigate('/advocate/petitions');
+    } else if (type?.includes('payment')) {
+      navigate('/advocate/payments');
+    } else if (relatedId) {
+      // Fallback: try as a case id if title mentions case
+      if ((notification.title || '').toLowerCase().includes('case')) {
+        await safeNavigateToCase(relatedId);
+      } else {
+        navigate('/advocate/dashboard');
+      }
+    } else {
+      navigate('/advocate/dashboard');
+    }
   };
 
   const getNotificationIcon = (type) => {

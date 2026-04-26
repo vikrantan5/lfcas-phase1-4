@@ -5,9 +5,15 @@ import NotificationDropdown from './NotificationDropdown';
 import { useAuth } from '../../contexts/AuthContext';
 import { getAvatarUrl, handleAvatarError } from '../../lib/utils';
 
-const DashboardHeader = ({ onToggleSidebar, userName = '👋' }) => {
+const DashboardHeader = ({ onToggleSidebar, userName }) => {
   const { user, logout } = useAuth();
   const avatarUrl = getAvatarUrl(user, { size: 40 });
+  const displayName =
+    userName ||
+    user?.full_name ||
+    user?.name ||
+    (user?.email ? user.email.split('@')[0] : '') ||
+    'User';
 
   return (
     <header className="adv-header" data-testid="dashboard-header">
@@ -22,7 +28,7 @@ const DashboardHeader = ({ onToggleSidebar, userName = '👋' }) => {
         </button>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1A0A3E', margin: 0, lineHeight: 1.3 }}>
-            Good morning, {userName} <span role="img" aria-label="wave">&#x1F44B;</span>
+            Good morning, {displayName} <span role="img" aria-label="wave">&#x1F44B;</span>
           </h1>
           <p style={{ fontSize: 12, color: '#888', margin: 0, fontWeight: 400 }}>
             Welcome back! Here's an overview of your activity and case management today.

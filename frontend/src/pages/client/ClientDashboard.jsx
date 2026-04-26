@@ -44,7 +44,7 @@ const Sidebar = ({ activeItem, setActiveItem, onStartAI }) => {
       items: [
         { id: 'my-cases', label: 'My Cases', icon: Briefcase, hasDropdown: true },
         { id: 'ai-assistant', label: 'AI Legal Assistant', icon: Bot },
-        { id: 'documents', label: 'Documents', icon: FileText },
+        { id: 'documents', label: 'Documents Upload', icon: FileText },
         { id: 'case-tracker', label: 'Case Tracker', icon: ClipboardCheck },
          { id: 'petitions', label: 'Petitions', icon: Scale, path: '/client/petitions' },
         { id: 'hearings', label: 'Hearings & Reminders', icon: Calendar },

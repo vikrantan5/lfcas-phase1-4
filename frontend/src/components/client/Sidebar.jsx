@@ -20,7 +20,7 @@ const Sidebar = ({ isOpen, onClose, userName }) => {
       title: 'CASE MANAGEMENT',
       items: [
         { id: 'dashboard', label: 'Dashboard', icon: Home, path: '/client/dashboard' },
-        { id: 'documents', label: 'Documents', icon: FileText, path: '/client/dashboard' },
+        { id: 'documents', label: 'Documents Upload', icon: FileText, path: '/client/dashboard' },
         { id: 'case-tracker', label: 'Case Tracker', icon: Briefcase, path: '/client/dashboard' },
           { id: 'petitions', label: 'Petitions', icon: Scale, path: '/client/petitions' },
         { id: 'hearings', label: 'Hearings & Reminders', icon: Calendar, path: '/client/dashboard' },

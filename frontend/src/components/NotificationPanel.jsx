@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { notificationAPI } from '../services/api';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -14,6 +15,7 @@ import {
 } from './ui/popover';
 import { ScrollArea } from './ui/scroll-area';
 import { useToast } from '../hooks/use-toast';
+import { useAuth } from '../contexts/AuthContext';
 
 const NotificationPanel = ({ darkMode = false }) => {
   const [notifications, setNotifications] = useState([]);
@@ -21,6 +23,8 @@ const NotificationPanel = ({ darkMode = false }) => {
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
+    const navigate = useNavigate();
+  const { user } = useAuth();
 
   useEffect(() => {
     loadNotifications();
@@ -74,6 +78,99 @@ const NotificationPanel = ({ darkMode = false }) => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+  
+  const handleNotificationClick = async (notification) => {
+    // Mark as read first
+    if (!notification.is_read) {
+      await handleMarkAsRead(notification.id);
+    }
+
+    // Close the popover
+    setOpen(false);
+
+    // Navigate based on notification type
+    const userRole = user?.role;
+    const relatedId = notification.related_id;
+
+    switch (notification.notification_type) {
+      case 'case_update':
+      case 'case_approved':
+        if (userRole === 'client') {
+          navigate(`/client/cases/${relatedId}`);
+        } else if (userRole === 'advocate') {
+          navigate(`/advocate/cases/${relatedId}`);
+        }
+        break;
+
+      case 'meeting_requested':
+        if (userRole === 'advocate') {
+          navigate('/advocate/requests');
+        } else if (userRole === 'client') {
+          navigate('/client/dashboard');
+        }
+        break;
+
+      case 'meeting_scheduled':
+      case 'meeting_accepted':
+        if (userRole === 'advocate') {
+          navigate('/advocate/meetings');
+        } else if (userRole === 'client') {
+          navigate('/client/dashboard');
+        }
+        break;
+
+      case 'meeting_rejected':
+        if (userRole === 'client') {
+          navigate('/client/find-advocates');
+        }
+        break;
+
+      case 'new_message':
+        if (userRole === 'advocate') {
+          navigate('/advocate/messages');
+        } else if (userRole === 'client' && relatedId) {
+          navigate(`/client/cases/${relatedId}`);
+        }
+        break;
+
+      case 'hearing_reminder':
+        if (userRole === 'advocate') {
+          navigate('/advocate/calendar');
+        } else if (userRole === 'client' && relatedId) {
+          navigate(`/client/cases/${relatedId}`);
+        }
+        break;
+
+      case 'document_uploaded':
+        if (userRole === 'advocate') {
+          navigate('/advocate/documents');
+        } else if (userRole === 'client' && relatedId) {
+          navigate(`/client/cases/${relatedId}`);
+        }
+        break;
+
+      case 'advocate_assigned':
+        if (userRole === 'client' && relatedId) {
+          navigate(`/client/cases/${relatedId}`);
+        }
+        break;
+
+      case 'case_rejected_by_advocate':
+        if (userRole === 'client') {
+          navigate('/client/find-advocates');
+        }
+        break;
+
+      default:
+        // For unknown types, go to dashboard
+        if (userRole === 'client') {
+          navigate('/client/dashboard');
+        } else if (userRole === 'advocate') {
+          navigate('/advocate/dashboard');
+        }
+        break;
     }
   };
 
@@ -191,7 +288,7 @@ const NotificationPanel = ({ darkMode = false }) => {
                       ? (darkMode ? 'bg-gray-800/50' : 'bg-blue-50/50') 
                       : (darkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-50')
                   }`}
-                  onClick={() => !notification.is_read && handleMarkAsRead(notification.id)}
+                   onClick={() => handleNotificationClick(notification)}
                   data-testid={`notification-${notification.id}`}
                 >
                   <div className="flex items-start space-x-3">

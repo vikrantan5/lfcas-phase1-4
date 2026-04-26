@@ -207,11 +207,19 @@ const MyAdvocate = () => {
         </div>
 
         <div className="flex gap-3 mt-6">
-          <Button className="bg-violet-600 hover:bg-violet-700">
+          <Button 
+            className="bg-violet-600 hover:bg-violet-700"
+            onClick={() => setShowMessageDialog(true)}
+            data-testid="send-message-button"
+          >
             <MessageSquare size={16} className="mr-2" />
             Send Message
           </Button>
-          <Button variant="outline">
+               <Button 
+            variant="outline"
+            onClick={() => setShowEmailDialog(true)}
+            data-testid="email-button"
+          >
             <Mail size={16} className="mr-2" />
             Email
           </Button>
@@ -292,6 +300,95 @@ const MyAdvocate = () => {
           onSuccess={handleRatingSuccess}
         />
       )}
+        {/* Send Message Dialog */}
+      <Dialog open={showMessageDialog} onOpenChange={setShowMessageDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send Message to {advocate?.user?.full_name}</DialogTitle>
+            <DialogDescription>
+              Send a message to your advocate
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Message</Label>
+              <Textarea
+                value={messageContent}
+                onChange={(e) => setMessageContent(e.target.value)}
+                placeholder="Type your message here..."
+                rows={5}
+              />
+            </div>
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setShowMessageDialog(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSendMessage} disabled={sending}>
+                {sending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Send size={16} className="mr-2" />
+                    Send Message
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Send Email Dialog */}
+      <Dialog open={showEmailDialog} onOpenChange={setShowEmailDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send Email to {advocate?.user?.full_name}</DialogTitle>
+            <DialogDescription>
+              Email: {advocate?.user?.email}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Subject</Label>
+              <Input
+                value={emailData.subject}
+                onChange={(e) => setEmailData({ ...emailData, subject: e.target.value })}
+                placeholder="Email subject..."
+              />
+            </div>
+            <div>
+              <Label>Message</Label>
+              <Textarea
+                value={emailData.message}
+                onChange={(e) => setEmailData({ ...emailData, message: e.target.value })}
+                placeholder="Type your message here..."
+                rows={5}
+              />
+            </div>
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setShowEmailDialog(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSendEmail} disabled={sending}>
+                {sending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Mail size={16} className="mr-2" />
+                    Send Email
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

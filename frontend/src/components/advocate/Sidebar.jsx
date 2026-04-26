@@ -14,6 +14,7 @@ const navItems = [
   { icon: Briefcase, label: 'My Cases', hasChevron: true, path: '/advocate/cases' },
   { icon: Search, label: 'Case Tracker', path: '/advocate/case-tracker' },
   { icon: Calendar, label: 'Calendar', path: '/advocate/calendar' },
+   { icon: Users, label: 'Meetings', path: '/advocate/meetings' },
   { icon: FileText, label: 'Requests', path: '/advocate/requests' },
   { icon: FileText, label: 'Documents', path: '/advocate/documents' },
   { icon: Scale, label: 'Petitions', path: '/advocate/petitions' },

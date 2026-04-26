@@ -1,11 +1,12 @@
 import React from 'react';
-import { Menu, Search, Bell, MessageSquare, Star } from 'lucide-react';
+import { Menu, Search, Bell, MessageSquare, Star, LogOut } from 'lucide-react';
+import { Button } from '../ui/button';
 import NotificationDropdown from './NotificationDropdown';
 import { useAuth } from '../../contexts/AuthContext';
 import { getAvatarUrl, handleAvatarError } from '../../lib/utils';
 
 const DashboardHeader = ({ onToggleSidebar, userName = 'Rahul Sharma' }) => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const avatarUrl = getAvatarUrl(user, { size: 40 });
 
   return (
@@ -57,14 +58,19 @@ const DashboardHeader = ({ onToggleSidebar, userName = 'Rahul Sharma' }) => {
           onError={handleAvatarError(user)}
         />
 
-        {/* Get Premium */}
-        {/* <button className="btn-premium" data-testid="get-premium-btn">
-          <Star size={14} fill="#fff" />
-          Get Premium
-        </button> */}
+        {/* Logout Button */}
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={logout}
+          data-testid="logout-button"
+          className="flex items-center gap-2"
+        >
+          <LogOut size={16} />
+          Logout
+        </Button>
       </div>
     </header>
   );
 };
-
 export default DashboardHeader;

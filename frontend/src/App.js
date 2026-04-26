@@ -26,6 +26,7 @@ import Messages from './pages/advocate/Messages';
 import FindClients from './pages/advocate/FindClients';
 import Settings from './pages/advocate/Settings';
 import AdvocatePetitions from './pages/advocate/Petitions';
+import AdvocateMeetings from './pages/advocate/Meetings';
 import ManagerDashboard from './pages/manager/ManagerDashboard';
 import AllAdvocatesPage from './pages/manager/AllAdvocates';
 import ReportsPage from './pages/manager/ReportsPage';
@@ -267,6 +268,14 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={['advocate']}>
                     <AdvocatePetitions />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/advocate/meetings"
+                element={
+                  <ProtectedRoute allowedRoles={['advocate']}>
+                    <AdvocateMeetings />
                   </ProtectedRoute>
                 }
               />

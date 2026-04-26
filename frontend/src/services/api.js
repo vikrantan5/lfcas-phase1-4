@@ -159,6 +159,7 @@ export const petitionAPI = {
   submit: (id) => api.patch(`/petitions/${id}/submit`),
   listByCase: (caseId) => api.get(`/petitions/case/${caseId}`),
   getById: (id) => api.get(`/petitions/${id}`),
+  listMine: () => api.get('/petitions/mine'),
 };
 
 // Rating APIs

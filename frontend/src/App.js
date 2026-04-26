@@ -12,6 +12,7 @@ import CaseDetailPage from './pages/client/CaseDetail';
 import AIOnboarding from './pages/client/AIOnboarding';
 
 import ClientPayments from './pages/client/Payments';
+import ClientPetitions from './pages/client/Petitions';
 import FindAdvocates from './pages/client/FindAdvocates';
 import AdvocateDashboard from './pages/advocate/AdvocateDashboard';
 import AdvocateCaseDetail from './pages/advocate/AdvocateCaseDetail';
@@ -24,6 +25,7 @@ import Payments from './pages/advocate/Payments';
 import Messages from './pages/advocate/Messages';
 import FindClients from './pages/advocate/FindClients';
 import Settings from './pages/advocate/Settings';
+import AdvocatePetitions from './pages/advocate/Petitions';
 import ManagerDashboard from './pages/manager/ManagerDashboard';
 import AllAdvocatesPage from './pages/manager/AllAdvocates';
 import ReportsPage from './pages/manager/ReportsPage';
@@ -162,6 +164,14 @@ function App() {
                   </ProtectedRoute>
                 }
               />
+                <Route
+                path="/client/petitions"
+                element={
+                  <ProtectedRoute allowedRoles={['client']}>
+                    <ClientPetitions />
+                  </ProtectedRoute>
+                }
+              />
 
               {/* Advocate Routes */}
               <Route
@@ -249,6 +259,14 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={['advocate']}>
                     <Settings />
+                  </ProtectedRoute>
+                }
+              />
+               <Route
+                path="/advocate/petitions"
+                element={
+                  <ProtectedRoute allowedRoles={['advocate']}>
+                    <AdvocatePetitions />
                   </ProtectedRoute>
                 }
               />

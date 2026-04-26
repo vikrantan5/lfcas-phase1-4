@@ -350,6 +350,46 @@ async def submit_petition(
     return submitted
 
 
+
+@router.get("/petitions/mine")
+async def list_my_petitions(
+    current_user: dict = Depends(get_current_user)
+):
+    """List all petitions accessible to the current user.
+    - Client: petitions (submitted only) on cases where they are the client.
+    - Advocate: petitions (all statuses) on cases where they are assigned.
+    """
+    role = current_user.get("role")
+
+    # Gather accessible case_ids
+    if role == UserRole.CLIENT or role == "client":
+        cases = supabase.table('cases').select('id, title, case_type').eq('client_id', current_user["user_id"]).execute()
+        case_ids = [c["id"] for c in (cases.data or [])]
+        if not case_ids:
+            return []
+        result = supabase.table('petitions').select('*').in_('case_id', case_ids).eq('status', PetitionStatus.SUBMITTED.value).order('created_at', desc=True).execute()
+        case_map = {c["id"]: c for c in (cases.data or [])}
+        for p in (result.data or []):
+            p["case"] = case_map.get(p.get("case_id"))
+        return result.data or []
+    elif role == UserRole.ADVOCATE or role == "advocate":
+        adv = supabase.table('advocates').select('id').eq('user_id', current_user["user_id"]).execute()
+        if not adv.data:
+            return []
+        advocate_id = adv.data[0]["id"]
+        cases = supabase.table('cases').select('id, title, case_type, client_id').eq('advocate_id', advocate_id).execute()
+        case_ids = [c["id"] for c in (cases.data or [])]
+        if not case_ids:
+            return []
+        result = supabase.table('petitions').select('*').in_('case_id', case_ids).order('created_at', desc=True).execute()
+        case_map = {c["id"]: c for c in (cases.data or [])}
+        for p in (result.data or []):
+            p["case"] = case_map.get(p.get("case_id"))
+        return result.data or []
+    else:
+        return []
+
+
 @router.get("/petitions/case/{case_id}")
 async def list_petitions_for_case(
     case_id: str,

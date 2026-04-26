@@ -6,7 +6,7 @@ import { getAvatarUrl, handleAvatarError } from '../../lib/utils';
 import {
   Home, Briefcase, Search, Calendar, FileText, DollarSign,
   MessageSquare, Users, Settings, ChevronDown, ChevronRight,
-  Trophy, MapPin, Award, Star
+  Trophy, MapPin, Award, Star, Scale
 } from 'lucide-react';
 
 const navItems = [
@@ -16,6 +16,7 @@ const navItems = [
   { icon: Calendar, label: 'Calendar', path: '/advocate/calendar' },
   { icon: FileText, label: 'Requests', path: '/advocate/requests' },
   { icon: FileText, label: 'Documents', path: '/advocate/documents' },
+  { icon: Scale, label: 'Petitions', path: '/advocate/petitions' },
   { icon: DollarSign, label: 'Payments', path: '/advocate/payments' },
   { icon: MessageSquare, label: 'Messages', path: '/advocate/messages' },
   { icon: Users, label: 'Find Clients', path: '/advocate/find-clients' },

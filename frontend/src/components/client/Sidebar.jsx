@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getAvatarUrl, handleAvatarError } from '../../lib/utils';
 import { 
   Home, Briefcase, FileText, Calendar, Search, UserCheck, 
-  MessageSquare, Download, BookOpen, Settings, DollarSign, X
+  MessageSquare, Download, BookOpen, Settings, DollarSign, X, Scale
 } from 'lucide-react';
 import '../../styles/client-dashboard.css';
 
@@ -22,6 +22,7 @@ const Sidebar = ({ isOpen, onClose, userName }) => {
         { id: 'dashboard', label: 'Dashboard', icon: Home, path: '/client/dashboard' },
         { id: 'documents', label: 'Documents', icon: FileText, path: '/client/dashboard' },
         { id: 'case-tracker', label: 'Case Tracker', icon: Briefcase, path: '/client/dashboard' },
+          { id: 'petitions', label: 'Petitions', icon: Scale, path: '/client/petitions' },
         { id: 'hearings', label: 'Hearings & Reminders', icon: Calendar, path: '/client/dashboard' },
       ]
     },

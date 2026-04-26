@@ -4546,46 +4546,58 @@ async def create_reminder(
     reminder_data: dict,
     current_user: dict = Depends(get_current_user)
 ):
-    """Create a reminder for a hearing or meeting"""
+    """Create a reminder for a hearing or meeting (stored as a notification)."""
     try:
         logger.info(f"Creating reminder for user {current_user['user_id']}: {reminder_data}")
-        
+
         # Validate required fields
         if not reminder_data.get("case_id"):
             raise HTTPException(status_code=400, detail="case_id is required")
-        
+
         if not reminder_data.get("reminder_time"):
             raise HTTPException(status_code=400, detail="reminder_time is required")
-        
-        # Create notification for the reminder
+
+        reminder_time = reminder_data.get("reminder_time")
+        hearing_id = reminder_data.get("hearing_id")
+        case_id = reminder_data.get("case_id")
+
+        # Try to format reminder_time nicely; fall back to raw value on parse error
+        readable_time = reminder_time
+        try:
+            from datetime import datetime as _dt
+            parsed = _dt.fromisoformat(str(reminder_time).replace("Z", "+00:00"))
+            readable_time = parsed.strftime("%b %d, %Y %I:%M %p")
+        except Exception:
+            pass
+
+        # Create a notification of type 'hearing_reminder' (matches DB enum).
+        # Schema: notifications(user_id, notification_type, title, message, related_id, ...)
         notification_data = {
             "user_id": current_user["user_id"],
-            "notification_type": NotificationType.SYSTEM,
+            "notification_type": NotificationType.HEARING_REMINDER.value if hasattr(NotificationType.HEARING_REMINDER, "value") else "hearing_reminder",
             "title": "Reminder Set",
-            "message": f"Reminder set for {reminder_data.get('reminder_time')}",
-            "reference_id": reminder_data.get("hearing_id") or reminder_data.get("case_id"),
-            "reference_type": "hearing" if reminder_data.get("hearing_id") else "case"
+            "message": f"Reminder set for {readable_time}",
+            "related_id": hearing_id or case_id,
         }
-        
+
         result = supabase.table('notifications').insert(notification_data).execute()
-        
+
         if not result.data:
             raise HTTPException(status_code=500, detail="Failed to create reminder")
-        
+
         logger.info(f"Reminder created successfully: {result.data[0]['id']}")
-        
+
         return {
             "success": True,
             "message": "Reminder set successfully",
             "reminder": result.data[0]
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error creating reminder: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to create reminder: {str(e)}")
-
 
 
 

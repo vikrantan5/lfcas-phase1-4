@@ -31,6 +31,7 @@ import HearingsReminders from './HearingsReminders';
 import Downloads from './Downloads';
 import LegalResources from './LegalResources';
 import SettingsPage from './Settings';
+import ClientPetitions from './Petitions';
 
 import PaymentsPage from './Payments';
 import { getAvatarUrl, handleAvatarError } from '../../lib/utils';
@@ -46,7 +47,7 @@ const Sidebar = ({ activeItem, setActiveItem, onStartAI }) => {
         { id: 'ai-assistant', label: 'AI Legal Assistant', icon: Bot },
         { id: 'documents', label: 'Documents Upload', icon: FileText },
         { id: 'case-tracker', label: 'Case Tracker', icon: ClipboardCheck },
-         { id: 'petitions', label: 'Petitions', icon: Scale, path: '/client/petitions' },
+         { id: 'petitions', label: 'Petitions', icon: Scale},
         { id: 'hearings', label: 'Hearings & Reminders', icon: Calendar },
       ]
     },
@@ -576,6 +577,7 @@ const ClientDashboard = () => {
           {activeItem === 'downloads' && <Downloads />}
         {activeItem === 'legal-resources' && <LegalResources />}
         {activeItem === 'settings' && <SettingsPage />}
+        {activeItem === 'petitions' && <ClientPetitions />}
 
         {/* ===== MAIN DASHBOARD VIEW (DEFAULT) ===== */}
            {(activeItem === 'dashboard' || activeItem === 'ai-assistant') && (

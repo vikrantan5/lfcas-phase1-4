@@ -225,7 +225,33 @@ const Meetings = () => {
                                 <Clock size={16} />
                                 <span>{formatTime(meeting.scheduled_date)}</span>
                               </div>
+                              {meeting.meeting_mode === 'online' ? (
+                                <div className="flex items-center gap-2 text-sm text-slate-600">
+                                  <Video size={16} />
+                                  <span>Online Meeting</span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2 text-sm text-slate-600">
+                                  <MapPin size={16} />
+                                  <span>{meeting.meeting_location || 'In Person'}</span>
+                                </div>
+                              )}
                             </div>
+
+                            {meeting.meeting_mode === 'online' && meeting.meeting_link && (
+                              <div className="mt-3">
+                                <a
+                                  href={meeting.meeting_link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-2 text-sm text-violet-600 hover:text-violet-700 bg-violet-50 px-3 py-2 rounded"
+                                >
+                                  <Video size={14} />
+                                  <span className="font-medium">Meeting Link</span>
+                                  <ExternalLink size={12} />
+                                </a>
+                              </div>
+                            )}
 
                             {meeting.decision_notes && (
                               <p className="text-sm text-slate-600 mt-3 bg-slate-50 p-3 rounded">

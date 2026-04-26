@@ -12,7 +12,7 @@ import logging
 
 from auth import get_current_user, require_role, get_supabase_client
 from groq_service import get_groq_client
-from cloudinary_service import upload_document_to_cloudinary
+from supabase_storage_service import upload_document_to_supabase, delete_document_from_supabase
 from models import (
     UserRole, NotificationType,
     ChatSession, ChatSessionCreate, ChatSessionAddMessage, ChatSessionAnalyze, ChatSessionResponse,
@@ -273,8 +273,12 @@ async def create_petition(
     if case.get("advocate_id") and case["advocate_id"] != advocate_id:
         raise HTTPException(status_code=403, detail="You are not assigned to this case")
 
-    # Upload to Cloudinary
-    upload_result = await upload_document_to_cloudinary(file, folder="lfcas_petitions")
+  # Upload to Supabase Storage (case-documents bucket, petitions folder)
+    upload_result = await upload_document_to_supabase(
+        file, 
+        bucket="case-documents",
+        folder=f"petitions/{case_id}"
+    )
     if not upload_result.get("success"):
         raise HTTPException(status_code=500, detail=f"Upload failed: {upload_result.get('error')}")
 

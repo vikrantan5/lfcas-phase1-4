@@ -355,7 +355,7 @@ const AdvocateDashboard = () => {
       <Sidebar
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
-        userName={user?.full_name || 'Rahul Sharma'}
+        userName={user?.full_name }
       />
 
       {/* Main Content */}
@@ -363,7 +363,7 @@ const AdvocateDashboard = () => {
         {/* Header */}
         <DashboardHeader
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-          userName={user?.full_name || 'Rahul Sharma'}
+          userName={user?.full_name }
         />
 
         {/* Profile Status Alert */}

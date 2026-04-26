@@ -163,12 +163,55 @@ const NotificationPanel = ({ darkMode = false }) => {
         }
         break;
 
-      default:
-        // For unknown types, go to dashboard
+      case 'petition_submitted':
+        // Navigate to petitions page
         if (userRole === 'client') {
-          navigate('/client/dashboard');
+          navigate('/client/petitions');
         } else if (userRole === 'advocate') {
-          navigate('/advocate/dashboard');
+          navigate('/advocate/petitions');
+        }
+        break;
+
+      case 'payment_request':
+      case 'payment_received':
+        if (userRole === 'client') {
+          navigate('/client/payments');
+        } else if (userRole === 'advocate') {
+          navigate('/advocate/payments');
+        }
+        break;
+
+      default:
+        // For unknown types, try to navigate based on related_id
+        if (relatedId) {
+          // Try to determine the type from context
+          if (notification.title?.toLowerCase().includes('petition')) {
+            if (userRole === 'client') {
+              navigate('/client/petitions');
+            } else if (userRole === 'advocate') {
+              navigate('/advocate/petitions');
+            }
+          } else if (notification.title?.toLowerCase().includes('case')) {
+            if (userRole === 'client') {
+              navigate(`/client/cases/${relatedId}`);
+            } else if (userRole === 'advocate') {
+              navigate(`/advocate/cases/${relatedId}`);
+            }
+          } else {
+            // Default to dashboard
+            if (userRole === 'client') {
+              navigate('/client/dashboard');
+            } else if (userRole === 'advocate') {
+              navigate('/advocate/dashboard');
+            }
+          }
+        } else {
+          // No related_id, go to dashboard
+          if (userRole === 'client') {
+            navigate('/client/dashboard');
+          } else if (userRole === 'advocate') {
+            navigate('/advocate/dashboard');
+          }
         }
         break;
     }
@@ -187,6 +230,9 @@ const NotificationPanel = ({ darkMode = false }) => {
       meeting_scheduled: <Calendar className="w-4 h-4" />,
       case_approved: <Check className="w-4 h-4" />,
       case_rejected_by_advocate: <AlertCircle className="w-4 h-4" />,
+      petition_submitted: <FileText className="w-4 h-4" />,
+      payment_request: <FileText className="w-4 h-4" />,
+      payment_received: <Check className="w-4 h-4" />,
       system: <Bell className="w-4 h-4" />,
     };
     return iconMap[type] || <Bell className="w-4 h-4" />;
@@ -205,6 +251,9 @@ const NotificationPanel = ({ darkMode = false }) => {
       meeting_scheduled: 'bg-blue-500',
       case_approved: 'bg-green-500',
       case_rejected_by_advocate: 'bg-red-500',
+         petition_submitted: 'bg-indigo-500',
+      payment_request: 'bg-yellow-500',
+      payment_received: 'bg-green-500',
       system: 'bg-gray-500',
     };
     return colorMap[type] || 'bg-gray-500';

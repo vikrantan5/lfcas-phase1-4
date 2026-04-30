@@ -3641,6 +3641,9 @@ async def get_voice_session_messages(
         logger.error(f"Error getting session messages: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get messages: {str(e)}")
 
+
+
+  
 @api_router.post("/voice/get-next-question")
 async def get_next_question(
     request: dict,

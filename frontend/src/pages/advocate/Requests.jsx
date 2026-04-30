@@ -97,12 +97,50 @@ const Requests = () => {
 
   const handleScheduleMeeting = async () => {
     if (!selectedRequest) return;
-    
+
+    // Validation: required date
+    if (!meetingData.scheduled_date) {
+      toast({ title: "Validation Error", description: "Please select a meeting date and time", variant: "destructive" });
+      return;
+    }
+
+    // Convert local datetime-local string to absolute ISO with timezone
+    const localDate = new Date(meetingData.scheduled_date);
+    if (isNaN(localDate.getTime())) {
+      toast({ title: "Invalid Date", description: "Please select a valid date and time", variant: "destructive" });
+      return;
+    }
+
+    // Validation: must be in future
+    if (localDate.getTime() <= Date.now()) {
+      toast({ title: "Invalid Date", description: "Meeting time must be in the future", variant: "destructive" });
+      return;
+    }
+
+    // Validation: Google Meet link
+    if (meetingData.meeting_mode === 'online') {
+      const link = (meetingData.meeting_link || '').trim();
+      if (!link) {
+        toast({ title: "Missing Link", description: "Please provide a Google Meet link", variant: "destructive" });
+        return;
+      }
+      if (!/^https:\/\/meet\.google\.com\//.test(link)) {
+        toast({ title: "Invalid Link", description: "Meeting link must be a valid Google Meet URL (https://meet.google.com/...)", variant: "destructive" });
+        return;
+      }
+    }
+
+    if (meetingData.meeting_mode === 'in_person' && !meetingData.meeting_location.trim()) {
+      toast({ title: "Missing Location", description: "Please provide a meeting location", variant: "destructive" });
+      return;
+    }
+
     try {
       setProcessing(true);
       await meetingAPI.schedule({
         meeting_request_id: selectedRequest.id,
-        ...meetingData
+        ...meetingData,
+        scheduled_date: localDate.toISOString()  // UTC ISO with Z
       });
       
       toast({
@@ -389,12 +427,19 @@ const Requests = () => {
           </DialogHeader>
           <div style={{ display: 'grid', gap: 16 }}>
             <div>
-              <Label>Meeting Date & Time</Label>
+              <Label>Meeting Date & Time (Your Local Time / IST)</Label>
               <Input
                 type="datetime-local"
                 value={meetingData.scheduled_date}
+                min={new Date(Date.now() + 5 * 60 * 1000).toISOString().slice(0, 16)}
                 onChange={(e) => setMeetingData({ ...meetingData, scheduled_date: e.target.value })}
+                data-testid="meeting-datetime-input"
               />
+              {meetingData.scheduled_date && (
+                <p style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+                  Will be saved as: {new Date(meetingData.scheduled_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })} IST
+                </p>
+              )}
             </div>
             <div>
               <Label>Meeting Mode</Label>

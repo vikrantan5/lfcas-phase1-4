@@ -37,9 +37,10 @@ const MeetingRequests = () => {
 
   const formatDate = (dateString) => {
     if (!dateString) return 'Not specified';
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
-    });
+     return new Date(dateString).toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true
+    }) + ' IST';
   };
 
   const getStatusBadge = (status) => {

@@ -3736,29 +3736,28 @@ async def get_next_question(
             language = "english"
         
         # === CONCISE LEGAL ASSISTANT PROMPT (max 3-4 short questions) ===
-        system_prompt = f"""You are a focused legal assistant AI for Indian law.
+        system_prompt = f"""You are an Indian legal intake assistant.
 
 LANGUAGE: {lang_instructions.get(language, 'Respond in English')}
 
+GOAL: Understand the user's legal issue in EXACTLY 3 to 4 short, relevant questions.
+
 STRICT RULES:
-- Be SHORT and PRECISE. Each reply MUST be under 40 words.
-- ONLY discuss legal/case matters. If user asks anything non-legal, reply once: "I can only help with legal matters. Please describe your legal issue."
-- Ask MAXIMUM 3 short follow-up questions across the whole conversation. NO interrogation lists.
-- Ask ONE question at a time, never multiple.
+- Each question MUST be a SINGLE short sentence (under 25 words).
+- Ask ONE question at a time. Never bundle questions.
+- ONLY ask LEGALLY RELEVANT questions (relationship status, duration, location/jurisdiction, urgency, harm suffered, parties involved, what relief is needed).
+- Do NOT give legal advice yet, do NOT cite sections.
+- Do NOT repeat a question already answered.
+- Be empathetic but extremely brief.
 
-CONVERSATION FLOW (strict):
-1. Q1 — Briefly acknowledge the problem and ask the single most important detail (who/when/what happened).
-2. Q2 — Ask ONE more critical detail (e.g., location/city OR urgency).
-3. After the user answers Q2 (i.e., user_responses >= 3), you MUST stop asking questions and append the literal token READY_TO_ANALYZE at the end of your reply.
+QUESTION COUNT (very important):
+- CURRENT_USER_RESPONSES = {user_responses}
+- If CURRENT_USER_RESPONSES == 1: ask Question 2 (most important detail, e.g., type/duration).
+- If CURRENT_USER_RESPONSES == 2: ask Question 3 (location/jurisdiction OR current living situation).
+- If CURRENT_USER_RESPONSES == 3: ask Question 4 — the FINAL question about what relief/outcome they want.
+- If CURRENT_USER_RESPONSES >= 4: STOP. Reply with ONE short empathetic line like "I understand your issue. Please click Analyze Case." and APPEND the literal token READY_TO_ANALYZE at the very end.
 
-CURRENT USER RESPONSES COUNT: {user_responses}
-
-- If user_responses >= 3: do NOT ask any new question. Give a 1-line empathetic acknowledgement and append READY_TO_ANALYZE.
-- Never repeat a question already answered.
-- Never give long disclaimers or numbered lists.
-- Be empathetic, human, and concise.
-
-Respond now to the user's latest message:
+NEVER ask more than 4 questions total. Respond now to the user's latest message:
 """
         
         messages_for_groq = [{"role": "system", "content": system_prompt}] + conversation_history
@@ -3772,21 +3771,26 @@ Respond now to the user's latest message:
         
         next_question = response.choices[0].message.content
         
-           # Check if AI thinks we have enough information - stricter threshold for 3-4 questions
-        ready_to_analyze = "READY_TO_ANALYZE" in next_question or user_responses >= 3
+           # Check if AI thinks we have enough information - 4-question cap
+        ready_to_analyze = "READY_TO_ANALYZE" in next_question or user_responses >= 4
         
         if ready_to_analyze:
             # Remove the READY_TO_ANALYZE marker if present
             next_question = next_question.replace("READY_TO_ANALYZE", "").strip()
-            
-            # Add natural completion message
-            if not next_question.endswith("'Finish & Analyze'") and not next_question.endswith("विश्लेषण करें"):
+
+            # Short completion line (no long paragraph)
+            if not next_question or len(next_question) < 10:
+                next_question = {
+                    "english": "I understand your issue. Please click 'Analyze Case' to see the details.",
+                    "hindi": "मैं आपकी समस्या समझ गया हूँ। विवरण देखने के लिए कृपया 'Analyze Case' पर क्लिक करें।"
+                }.get(language, "I understand your issue. Please click 'Analyze Case' to see the details.")
+            else:
                 completion_msg = {
-                    "english": " I now have enough information to provide you with a comprehensive legal analysis. Click 'Finish & Analyze' button below to see detailed insights, applicable laws, and recommended advocates.",
-                    "hindi": " अब मेरे पास आपके मामले का विस्तृत विश्लेषण करने के लिए पर्याप्त जानकारी है। विस्तृत जानकारी, लागू कानून और अनुशंसित वकील देखने के लिए नीचे 'समाप्त करें और विश्लेषण करें' बटन पर क्लिक करें।"
-                }.get(language, "")
-                
-                next_question = next_question.strip() + completion_msg
+                    "english": " Please click 'Analyze Case' to continue.",
+                    "hindi": " कृपया 'Analyze Case' पर क्लिक करें।"
+                }.get(language, " Please click 'Analyze Case' to continue.")
+                if "Analyze Case" not in next_question and "विश्लेषण" not in next_question:
+                    next_question = next_question.strip() + completion_msg
         
         return {
             "success": True,

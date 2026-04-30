@@ -615,20 +615,50 @@ const AIOnboarding = () => {
             <div className="p-8">
               {analysis && analysis.structured_output ? (
                 <div className="space-y-6">
-                  {/* Case Type */}
-                  {(analysis.case_type || analysis.structured_output.case_classification) && (
-                    <div className="bg-purple-50 rounded-xl p-6 border border-purple-100">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="w-10 h-10 bg-purple-500 rounded-lg flex items-center justify-center">
-                          <Scale size={20} className="text-white" />
-                        </div>
-                        <h3 className="text-xl font-semibold text-gray-900">Case Type</h3>
-                      </div>
-                      <p className="text-lg text-gray-700 font-medium">
-                        {formatCaseType(analysis.case_type || analysis.structured_output.case_classification)}
-                      </p>
+                  {/* COMPACT CASE ANALYSIS CARD (short, 4 fields) */}
+                  <div className="bg-white rounded-xl p-6 border-2 border-purple-300 shadow-sm" data-testid="case-analysis-card">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Sparkles size={20} className="text-purple-600" />
+                      <h3 className="text-lg font-bold text-gray-900">Case Analysis</h3>
                     </div>
-                  )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <div className="text-gray-500 font-medium">Case Type</div>
+                        <div className="text-gray-900 font-semibold mt-1">
+                          {formatCaseType(analysis.case_type || analysis.structured_output.case_classification || 'Other')}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500 font-medium">Urgency</div>
+                        <div className={`font-semibold mt-1 inline-block px-2 py-0.5 rounded ${
+                          (analysis.urgency_level || 'medium').toLowerCase() === 'high' ? 'bg-red-100 text-red-700' :
+                          (analysis.urgency_level || 'medium').toLowerCase() === 'low' ? 'bg-green-100 text-green-700' :
+                          'bg-amber-100 text-amber-700'
+                        }`}>
+                          {(analysis.urgency_level || 'Medium').toUpperCase()}
+                        </div>
+                      </div>
+                      <div className="md:col-span-2">
+                        <div className="text-gray-500 font-medium">Summary</div>
+                        <div className="text-gray-900 mt-1 leading-relaxed">
+                          {analysis.structured_output?.summary
+                            || analysis.structured_output?.case_summary
+                            || analysis.procedural_guidance?.split('.').slice(0, 2).join('.') + '.'
+                            || 'Case details captured from your conversation.'}
+                        </div>
+                      </div>
+                      {(analysis.structured_output?.key_issues || analysis.structured_output?.issues || []).length > 0 && (
+                        <div className="md:col-span-2">
+                          <div className="text-gray-500 font-medium">Key Issues</div>
+                          <ul className="mt-1 list-disc list-inside text-gray-900 space-y-0.5">
+                            {(analysis.structured_output?.key_issues || analysis.structured_output?.issues || []).slice(0, 4).map((it, i) => (
+                              <li key={i}>{it}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
                   {/* Legal Sections */}
                   {analysis.legal_sections?.length > 0 && (

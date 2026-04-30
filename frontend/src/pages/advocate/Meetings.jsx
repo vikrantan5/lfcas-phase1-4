@@ -53,6 +53,7 @@ const Meetings = () => {
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-IN', {
+      timeZone: 'Asia/Kolkata',
       day: 'numeric',
       month: 'short',
       year: 'numeric'
@@ -62,11 +63,46 @@ const Meetings = () => {
   const formatTime = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleTimeString('en-IN', {
+      timeZone: 'Asia/Kolkata',
       hour: '2-digit',
-      minute: '2-digit'
-    });
+      minute: '2-digit',
+      hour12: true
+    }) + ' IST';
   };
 
+  const handleMarkComplete = async (meeting) => {
+    try {
+      await meetingAPI.complete(meeting.id);
+      toast({ title: "Meeting completed", description: "You can now Accept or Reject the case." });
+      loadMeetings();
+    } catch (e) {
+      toast({ title: "Error", description: e.response?.data?.detail || "Failed to mark meeting complete", variant: "destructive" });
+    }
+  };
+
+  const handleCaseDecision = async (meeting, decision) => {
+    let notes = '';
+    let title = '';
+    if (decision === 'reject') {
+      notes = window.prompt('Reason for rejecting this case (optional):') || '';
+    } else {
+      title = window.prompt('Case title (optional):', `Case for ${meeting.client?.full_name || 'Client'}`) || '';
+    }
+    try {
+      await meetingAPI.decision(meeting.id, {
+        decision,
+        decision_notes: notes,
+        case_title: title || undefined
+      });
+      toast({
+        title: decision === 'accept' ? 'Case Accepted' : 'Case Rejected',
+        description: decision === 'accept' ? 'Case created and client has been notified.' : 'Client has been notified.'
+      });
+      loadMeetings();
+    } catch (e) {
+      toast({ title: "Error", description: e.response?.data?.detail || "Failed to record decision", variant: "destructive" });
+    }
+  };
   const upcomingMeetings = meetings.filter(m => 
     new Date(m.scheduled_date) >= new Date() && m.status !== 'completed'
   );
@@ -170,7 +206,7 @@ const Meetings = () => {
                             )}
                           </div>
 
-                          <div>
+                                               <div className="flex flex-col gap-2">
                             {meeting.meeting_mode === 'online' && meeting.meeting_link && (
                               <Button
                                 onClick={() => handleJoinMeeting(meeting)}
@@ -179,6 +215,16 @@ const Meetings = () => {
                               >
                                 <ExternalLink size={16} className="mr-2" />
                                 Join Meeting
+                              </Button>
+                            )}
+                            {meeting.status !== 'completed' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleMarkComplete(meeting)}
+                                data-testid={`mark-complete-upcoming-${meeting.id}`}
+                              >
+                                Mark Completed
                               </Button>
                             )}
                           </div>
@@ -260,6 +306,46 @@ const Meetings = () => {
                                 {meeting.decision_notes}
                               </p>
                             )}
+
+                                  {/* POST-MEETING DECISION FLOW */}
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              {meeting.status !== 'completed' && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleMarkComplete(meeting)}
+                                  data-testid={`mark-complete-${meeting.id}`}
+                                >
+                                  Mark Meeting Completed
+                                </Button>
+                              )}
+                              {meeting.status === 'completed' && (!meeting.advocate_decision || meeting.advocate_decision === 'pending') && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    className="bg-green-600 hover:bg-green-700 text-white"
+                                    onClick={() => handleCaseDecision(meeting, 'accept')}
+                                    data-testid={`accept-case-${meeting.id}`}
+                                  >
+                                    Accept Case
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    onClick={() => handleCaseDecision(meeting, 'reject')}
+                                    data-testid={`reject-case-${meeting.id}`}
+                                  >
+                                    Reject Case
+                                  </Button>
+                                </>
+                              )}
+                              {meeting.advocate_decision === 'accepted' && (
+                                <Badge className="bg-green-100 text-green-700">Case Accepted ✓</Badge>
+                              )}
+                              {meeting.advocate_decision === 'rejected' && (
+                                <Badge variant="destructive">Case Rejected</Badge>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </CardContent>

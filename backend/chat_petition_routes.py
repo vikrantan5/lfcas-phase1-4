@@ -193,12 +193,33 @@ async def recommend_advocates(
     current_user: dict = Depends(get_current_user)
 ):
     """AI-powered advocate matching based on case type, location, rating, experience.
-    Returns advocates with a match_score (0-100)."""
+    Returns advocates with a match_score (0-100). Strictly filters by case_type if provided."""
+
+    # Normalize case_type to DB enum format
+    SPEC_ALIAS = {
+        "child custody": "child_custody",
+        "alimony / maintenance": "alimony",
+        "maintenance": "alimony",
+        "domestic violence": "domestic_violence",
+        "property dispute": "property_dispute",
+        "property_di_pute": "property_dispute",
+    }
+    case_type_lc = (case_type or "").strip().lower()
+    if case_type_lc:
+        case_type_lc = SPEC_ALIAS.get(case_type_lc, case_type_lc.replace(" ", "_"))
+
     query = supabase.table('advocates').select('*, users(id, full_name, email, profile_image_url, phone)').eq('status', 'approved')
+    # STRICT FILTER BY SPECIALIZATION when case_type provided
+    if case_type_lc and case_type_lc != "all":
+        query = query.contains('specializations', [case_type_lc])
+
     result = query.execute()
     advocates = result.data or []
 
-    case_type_lc = (case_type or "").lower().strip()
+    # If strict filter returned nothing, return empty list (frontend shows "No advocates available")
+    if case_type_lc and case_type_lc != "all" and not advocates:
+        return {"advocates": [], "case_type": case_type, "location": location, "message": "No advocates available for this case currently."}
+
     location_lc = (location or "").lower().strip()
 
     scored = []
@@ -206,10 +227,13 @@ async def recommend_advocates(
         spec_match = 0
         specs = [s.lower() for s in (adv.get('specializations') or [])]
         if case_type_lc:
-            for s in specs:
-                if case_type_lc in s or s in case_type_lc:
-                    spec_match = 50
-                    break
+            if case_type_lc in specs:
+                spec_match = 60
+            else:
+                for s in specs:
+                    if case_type_lc in s or s in case_type_lc:
+                        spec_match = 30
+                        break
 
         loc_match = 0
         adv_loc = (adv.get('location') or '').lower()
@@ -230,7 +254,8 @@ async def recommend_advocates(
         adv["matched_specialization"] = case_type_lc if spec_match > 0 else None
         scored.append(adv)
 
-    scored.sort(key=lambda a: (a["match_score"], a.get("rating", 0), a.get("experience_years", 0)), reverse=True)
+    # Sort by rating desc, experience desc (per user spec), with match_score as tiebreaker
+    scored.sort(key=lambda a: (a.get("rating", 0) or 0, a.get("experience_years", 0) or 0, a["match_score"]), reverse=True)
     top = scored[:limit]
 
     out = []
@@ -241,7 +266,6 @@ async def recommend_advocates(
             "user": user_data,
         })
     return {"advocates": out, "case_type": case_type, "location": location}
-
 
 # ============= PETITIONS =============
 

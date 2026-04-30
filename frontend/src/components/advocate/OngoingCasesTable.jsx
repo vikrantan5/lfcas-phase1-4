@@ -2,50 +2,50 @@ import React from 'react';
 import { CheckCircle, Calendar as CalendarIcon } from 'lucide-react';
 
 const mockCases = [
-  {
-    id: 'LFCT23456',
-    clientName: 'Nida Khan',
-    opponent: 'Faizan Malik',
-    caseType: 'Divorce',
-    stage: 'Hearing Today',
-    stageClass: 'stage-hearing',
-    hearingDate: 'Today 10:00..',
-    hearingIcon: true,
-    status: 'Complete',
-  },
-  {
-    id: 'LFCT23401',
-    clientName: 'Sakshi Verma',
-    opponent: 'Amit Verma',
-    caseType: 'Divorce',
-    stage: 'Court Response',
-    stageClass: 'stage-response',
-    hearingDate: 'Today, 10:00 AM',
-    hearingIcon: false,
-    status: 'Complete',
-  },
-  {
-    id: 'LFCT23356',
-    clientName: 'Priya Kapoor',
-    opponent: 'Supett Kaporce',
-    caseType: 'Divorce',
-    stage: 'Awaiting Documents',
-    stageClass: 'stage-documents',
-    hearingDate: '',
-    hearingIcon: false,
-    status: 'Complete',
-  },
-  {
-    id: 'LFCT23345',
-    clientName: 'Kunal Gupta',
-    opponent: 'Nona Guple',
-    caseType: 'Divorce',
-    stage: 'Filed',
-    stageClass: 'stage-filed',
-    hearingDate: 'Today : 1.° m.',
-    hearingIcon: false,
-    status: '',
-  },
+  // {
+  //   id: 'LFCT23456',
+  //   clientName: 'Nida Khan',
+  //   opponent: 'Faizan Malik',
+  //   caseType: 'Divorce',
+  //   stage: 'Hearing Today',
+  //   stageClass: 'stage-hearing',
+  //   hearingDate: 'Today 10:00..',
+  //   hearingIcon: true,
+  //   status: 'Complete',
+  // },
+  // {
+  //   id: 'LFCT23401',
+  //   clientName: 'Sakshi Verma',
+  //   opponent: 'Amit Verma',
+  //   caseType: 'Divorce',
+  //   stage: 'Court Response',
+  //   stageClass: 'stage-response',
+  //   hearingDate: 'Today, 10:00 AM',
+  //   hearingIcon: false,
+  //   status: 'Complete',
+  // },
+  // {
+  //   id: 'LFCT23356',
+  //   clientName: 'Priya Kapoor',
+  //   opponent: 'Supett Kaporce',
+  //   caseType: 'Divorce',
+  //   stage: 'Awaiting Documents',
+  //   stageClass: 'stage-documents',
+  //   hearingDate: '',
+  //   hearingIcon: false,
+  //   status: 'Complete',
+  // },
+  // {
+  //   id: 'LFCT23345',
+  //   clientName: 'Kunal Gupta',
+  //   opponent: 'Nona Guple',
+  //   caseType: 'Divorce',
+  //   stage: 'Filed',
+  //   stageClass: 'stage-filed',
+  //   hearingDate: 'Today : 1.° m.',
+  //   hearingIcon: false,
+  //   status: '',
+  // },
 ];
 
 const OngoingCasesTable = ({ cases = [] }) => {
@@ -62,7 +62,7 @@ const OngoingCasesTable = ({ cases = [] }) => {
   })) : mockCases;
 
   return (
-    <div className="dash-card" data-testid="ongoing-cases-table">
+    <div className="dash-card pb-5" data-testid="ongoing-cases-table">
       <div className="card-header">
         <h3>Ongoing Cases</h3>
       </div>

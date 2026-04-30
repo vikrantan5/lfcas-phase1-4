@@ -48,12 +48,12 @@ const DashboardHeader = ({ onToggleSidebar, userName }) => {
   <NotificationDropdown />
 
         {/* Messages */}
-        <button
+        {/* <button
           style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 6 }}
           data-testid="messages-icon"
         >
           <MessageSquare size={20} color="#4A4A4A" />
-        </button>
+        </button> */}
 
         {/* Avatar */}
         <img

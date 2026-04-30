@@ -411,13 +411,13 @@ const AdvocateDashboard = () => {
             {/* RIGHT COLUMN */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               {/* Today's Hearings */}
-              <TodaysHearings />
-
+              {/* <TodaysHearings /> */}
+               <RemindersToday />
               {/* Pending Client Requests */}
               <PendingClientRequests requests={meetingRequests.filter(r => r.status === 'pending')} />
 
               {/* Reminders for Today */}
-              <RemindersToday />
+             
             </div>
           </div>
         </div>

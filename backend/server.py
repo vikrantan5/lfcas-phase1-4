@@ -3692,9 +3692,10 @@ async def get_next_question(
                 is_legal = intent.get("is_legal", True)
                 confidence = intent.get("confidence", 0.5) or 0.5
 
-                # Strict gate: reject ONLY if clearly non-legal with high
-                # confidence (>= 0.85). All ambiguous / uncertain inputs pass.
-                if is_legal is False and confidence >= 0.85:
+                # Strict gate: reject if clearly non-legal with reasonable
+                # confidence (>= 0.6). The classifier rarely returns is_legal=False
+                # for genuine legal issues, so a moderate threshold is safe.
+                if is_legal is False and confidence >= 0.6:
                     refusal = {
                         "english": "I can only help with legal or case-related matters (for example: divorce, property disputes, child custody, domestic violence, dowry harassment, maintenance, fraud, cheating, tenant issues, etc.). Your question doesn't seem to be a legal problem. Please describe the legal issue you're facing so I can assist you.",
                         "hindi": "मैं केवल कानूनी या केस से जुड़े मामलों में मदद कर सकता हूँ (जैसे तलाक, संपत्ति विवाद, बच्चों की कस्टडी, घरेलू हिंसा, दहेज उत्पीड़न, गुजारा भत्ता, धोखाधड़ी, किरायेदारी विवाद आदि)। आपका प्रश्न कानूनी समस्या नहीं लगता। कृपया अपनी कानूनी समस्या बताइए ताकि मैं मदद कर सकूँ।"
@@ -3711,18 +3712,6 @@ async def get_next_question(
                 # and let the main LLM handle it. Rejecting on errors is the
                 # root cause of valid legal queries being blocked.
                 logger.warning(f"Legal intent classifier failed, allowing through: {intent_err}")
-            except Exception as intent_err:
-                logger.warning(f"Legal intent classifier failed: {intent_err}")
-                fallback_refusal = {
-                    "english": "I can only assist with legal or case-related matters. Please describe the legal issue you are facing (e.g., divorce, property dispute, harassment, fraud).",
-                    "hindi": "मैं केवल कानूनी मामलों में मदद कर सकता हूँ। कृपया अपनी कानूनी समस्या बताइए (जैसे तलाक, संपत्ति विवाद, उत्पीड़न, धोखाधड़ी)।"
-                }.get(language, "I can only assist with legal or case-related matters. Please describe your legal problem.")
-                return {
-                    "success": True,
-                    "next_question": fallback_refusal,
-                    "ready_to_analyze": False,
-                    "non_legal": True
-                }
             
                 # ---------------------------------------------------------------
         # DOMESTIC VIOLENCE EMPATHY FLOW

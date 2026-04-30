@@ -3676,8 +3676,11 @@ async def get_next_question(
         # Count user responses (excluding greeting)
         user_responses = len([msg for msg in conversation_history if msg["role"] == "user"])
 
-        # ---------------------------------------------------------------
+         # ---------------------------------------------------------------
         # LEGAL-ONLY GUARD (AI-BASED, NOT KEYWORDS)
+        # Only REJECT when the classifier is HIGHLY confident the input is
+        # non-legal. Otherwise, always let the message through — real legal
+        # queries must never be wrongly blocked.
         # ---------------------------------------------------------------
         if user_message and len(user_message.strip()) > 3:
             try:
@@ -3689,7 +3692,9 @@ async def get_next_question(
                 is_legal = intent.get("is_legal", True)
                 confidence = intent.get("confidence", 0.5) or 0.5
 
-                if is_legal is False:
+                # Strict gate: reject ONLY if clearly non-legal with high
+                # confidence (>= 0.85). All ambiguous / uncertain inputs pass.
+                if is_legal is False and confidence >= 0.85:
                     refusal = {
                         "english": "I can only help with legal or case-related matters (for example: divorce, property disputes, child custody, domestic violence, dowry harassment, maintenance, fraud, cheating, tenant issues, etc.). Your question doesn't seem to be a legal problem. Please describe the legal issue you're facing so I can assist you.",
                         "hindi": "मैं केवल कानूनी या केस से जुड़े मामलों में मदद कर सकता हूँ (जैसे तलाक, संपत्ति विवाद, बच्चों की कस्टडी, घरेलू हिंसा, दहेज उत्पीड़न, गुजारा भत्ता, धोखाधड़ी, किरायेदारी विवाद आदि)। आपका प्रश्न कानूनी समस्या नहीं लगता। कृपया अपनी कानूनी समस्या बताइए ताकि मैं मदद कर सकूँ।"
@@ -3702,6 +3707,11 @@ async def get_next_question(
                         "non_legal": True
                     }
             except Exception as intent_err:
+                # On classifier failure: DO NOT reject. Let the message through
+                # and let the main LLM handle it. Rejecting on errors is the
+                # root cause of valid legal queries being blocked.
+                logger.warning(f"Legal intent classifier failed, allowing through: {intent_err}")
+            except Exception as intent_err:
                 logger.warning(f"Legal intent classifier failed: {intent_err}")
                 fallback_refusal = {
                     "english": "I can only assist with legal or case-related matters. Please describe the legal issue you are facing (e.g., divorce, property dispute, harassment, fraud).",
@@ -3713,6 +3723,30 @@ async def get_next_question(
                     "ready_to_analyze": False,
                     "non_legal": True
                 }
+            
+                # ---------------------------------------------------------------
+        # DOMESTIC VIOLENCE EMPATHY FLOW
+        # If the conversation indicates domestic violence / abuse, switch to
+        # an empathetic, safety-first scripted flow rather than legal-intake.
+        # ---------------------------------------------------------------
+        dv_cues_en = [
+            "beat", "beats", "beating", "beaten", "hit me", "hits me",
+            "hitting", "slap", "slapping", "slapped", "abuse", "abusing",
+            "abusive", "torture", "violence", "domestic violence",
+            "harass", "harassing", "dowry", "in-law", "mother-in-law",
+            "father-in-law", "sasural", "husband hit", "husband beat"
+        ]
+        dv_cues_hi = [
+            "मारता", "मारती", "पीटता", "पीटती", "पिटाई", "मारपीट",
+            "प्रताड़ना", "हिंसा", "दहेज", "पति"
+        ]
+        convo_lower = " ".join(
+            m["content"].lower() for m in conversation_history
+            if isinstance(m.get("content"), str)
+        )
+        is_dv_case = any(c in convo_lower for c in dv_cues_en + dv_cues_hi)
+
+        # ---------------------------------------------------------------
         
         # Continue with normal flow
         from groq import Groq
@@ -3727,7 +3761,61 @@ async def get_next_question(
             language = "english"
         
         # === HUMAN-LIKE LEGAL INTAKE ASSISTANT PROMPT ===
-        system_prompt = f"""You are a warm, experienced Indian legal advisor sitting across from a client in your office.
+        if is_dv_case:
+            # Empathetic, safety-first Domestic Violence flow (user-specified)
+            system_prompt = f"""You are a compassionate legal & crisis-support counsellor on an Indian legal-aid helpline, speaking with a woman who has just disclosed domestic violence.
+
+LANGUAGE: {lang_instructions.get(language, 'Respond in English')}
+
+CORE PRINCIPLES:
+- Warmth, empathy, and non-judgment come FIRST. Legal facts come LATER.
+- NEVER sound robotic, clinical, or dismissive.
+- NEVER blame the survivor. NEVER minimise. NEVER interrogate.
+- ONE short message at a time. 1–3 short sentences max. No bullet lists unless listing the two intent options (counselling / legal).
+
+FOLLOW THIS EXACT CONVERSATION FLOW (advance step by step based on what she has already said):
+
+STEP 1 — EMPATHY + SAFETY CHECK (only if not yet asked):
+Say something like:
+"I'm really sorry you're going through this. You don't deserve to be treated this way. Are you safe right now?"
+
+STEP 2A — IF SHE IS NOT SAFE ("no", "not safe", "he is here", "scared"):
+Respond with emergency support. Example:
+"Your safety is the most important thing right now. If you can, please call emergency services (112) or the women's helpline (181). Is there someone nearby you trust who can help you immediately?"
+Then PAUSE the normal intake flow. Stay on safety.
+
+STEP 2B — IF SHE IS SAFE ("yes", "safe now", "at my parents' place"):
+Gently offer two paths:
+"I'm here to help. Would you like support with:
+1) Talking through what you're going through (counselling), or
+2) Understanding your legal options?"
+
+STEP 3A — IF SHE CHOOSES COUNSELLING (path A):
+Be gentle. Ask ONE soft question at a time, e.g.
+"That sounds okay. You can share as much or as little as you're comfortable with. How long has this been happening?"
+Then: "That must be really difficult. Do you have children who may be affected?"
+Then: "You're not alone in this. If possible, consider reaching out to someone you trust — a friend, family member, or a local support group. I can also help you think through small steps to stay safe and supported. Would you like that?"
+
+STEP 3B — IF SHE CHOOSES LEGAL OPTIONS (path B):
+Say: "I can help you understand your legal options. I'll ask a couple of questions to guide you better."
+Ask ONE at a time:
+- "How long has this been happening?"
+- "Do you have children involved?"
+
+STEP 4 — LEGAL GUIDANCE (only after Step 3B questions are answered):
+Give a SHORT, simple summary — not overwhelming. Example wording:
+"Based on what you've shared, your situation may fall under the Protection of Women from Domestic Violence Act, 2005 and Indian Penal Code Section 498A. Under these, you may have the right to protection from further violence, residence rights, financial support (maintenance), and child custody if applicable. You can file a complaint at your nearest police station or approach a Protection Officer. Would you like help understanding the next steps?"
+
+RULES:
+- Look at the conversation so far. Do NOT repeat steps already covered.
+- Ask ONLY ONE question per message.
+- Never give legal sections until Step 4.
+- If she signals she is done (e.g., "that's all", "I have told everything"), reply with one warm sentence like "I understand. Please click Analyze Case." and APPEND the literal token READY_TO_ANALYZE at the very end.
+
+Respond now to her latest message:
+"""
+        else:
+            system_prompt = f"""You are a warm, experienced Indian legal advisor sitting across from a client in your office.
 
 LANGUAGE: {lang_instructions.get(language, 'Respond in English')}
 
@@ -3766,10 +3854,10 @@ Respond now to the user's latest message:
         messages_for_groq = [{"role": "system", "content": system_prompt}] + conversation_history
         
         response = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+             model="llama-3.3-70b-versatile",
             messages=messages_for_groq,
             temperature=0.7,
-            max_tokens=120
+               max_tokens=200 if is_dv_case else 120
         )
         
         next_question = response.choices[0].message.content

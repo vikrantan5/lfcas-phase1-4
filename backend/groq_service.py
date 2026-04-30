@@ -220,11 +220,78 @@ USER TRANSCRIPT:
 """
 
 
+# Strong legal-intent keywords (EN + Hindi). If ANY appears → immediately legal.
+LEGAL_KEYWORDS = [
+    # Family law
+    "divorce", "talak", "talaq", "mutual divorce", "contested divorce",
+    "custody", "child custody", "guardianship", "adoption",
+    "maintenance", "alimony", "husband", "wife", "marriage", "married",
+    "domestic violence", "498a", "dowry", "harassment", "abuse", "abusive",
+    "beat", "beating", "beats", "beaten", "hit", "hitting", "slap", "slapping",
+    "torture", "in-law", "in laws", "mother-in-law", "father-in-law", "sasural",
+    # Property / civil
+    "property", "land", "house", "flat", "apartment", "plot", "ancestral",
+    "inheritance", "will", "partition", "possession", "eviction", "tenant",
+    "landlord", "lease", "rent", "ownership", "title deed", "registry",
+    "uncle", "aunt", "brother", "sister", "family property", "ancestral property",
+    "captured", "took my", "grabbed my", "encroach", "encroachment",
+    # Criminal
+    "fraud", "cheating", "cheated", "scam", "theft", "stole", "stolen",
+    "robbery", "assault", "murder", "rape", "molestation",
+    "sexual harassment", "stalking", "threat", "threatening", "blackmail",
+    "extortion", "forgery", "police", "fir", "complaint", "arrest", "bail",
+    "court", "judge", "ipc", "crpc", "section", "act", "law", "legal", "illegal",
+    # Civil
+    "contract", "agreement", "breach", "damages", "compensation",
+    "defamation", "libel", "slander", "negligence", "consumer",
+    "insurance", "claim", "loan", "debt", "money recovery", "embezzlement",
+    # Labour
+    "employment", "termination", "wrongful termination", "salary",
+    "wages", "pf", "esic", "gratuity",
+    # General legal
+    "advocate", "lawyer", "attorney", "solicitor", "vakil", "case",
+    "file case", "sue", "lawsuit", "petition", "appeal", "judgment",
+    "court order", "legal notice", "summons", "warrant",
+    # Hindi
+    "तलाक", "गुजारा", "संपत्ति", "जमीन", "मकान", "वसीयत",
+    "हिंसा", "पिटाई", "मारपीट", "प्रताड़ना", "दहेज", "शिकायत", "पुलिस",
+    "अदालत", "वकील", "कानून", "केस", "मुकदमा", "धोखा", "ठगी", "पति", "पत्नी",
+    "मारता", "मारती", "पीटता", "पीटती"
+]
+
+
+def _keyword_legal_match(text: str) -> bool:
+    t = (text or "").lower()
+    for kw in LEGAL_KEYWORDS:
+        if kw in t:
+            return True
+    return False
+
+
 async def detect_legal_intent(conversation_text: str) -> Dict:
     """
-    Use Groq AI to detect if a conversation is about a legal issue.
-    This replaces keyword-based validation with intelligent context understanding.
+    Detect whether a conversation is about a legal issue.
+
+    Strategy (in order):
+    1. Fast-path: keyword match → is_legal=True (no LLM call, deterministic).
+    2. LLM (Groq) classifier for ambiguous cases.
+    3. Fail-safe: if LLM fails or JSON un-parseable → default to is_legal=True
+       (confidence 0.5). It is safer to let a potentially valid legal question
+       through than to wrongly reject a real user in distress.
     """
+    # 1. Fast-path keyword match
+    if _keyword_legal_match(conversation_text):
+        return {
+            "success": True,
+            "is_legal": True,
+            "case_type": None,
+            "confidence": 0.95,
+            "summary": "Matched legal keyword pattern",
+            "legal_domain": None,
+            "reason_if_rejected": None,
+            "tokens_used": 0,
+        }
+
     try:
         groq_client = get_groq_client()
         
@@ -243,9 +310,9 @@ async def detect_legal_intent(conversation_text: str) -> Dict:
                     "content": prompt
                 }
             ],
-            model="llama-3.3-70b-versatile",
+           model="llama-3.3-70b-versatile",
             temperature=0.2,
-            max_tokens=500
+            max_tokens=250
         )
         
         # Extract response
@@ -283,24 +350,27 @@ async def detect_legal_intent(conversation_text: str) -> Dict:
             logger.error(f"Failed to parse legal intent response: {e}")
             logger.error(f"Raw response: {response_content}")
 
-            # Fail-safe: if we can't parse, treat as NOT legal so the bot asks for
-            # clarification instead of blindly answering general questions.
+            # Fail-safe: if we can't parse, ALLOW the query through as legal so
+            # we never wrongly reject a real user describing a legal problem.
+            # The downstream conversation still gates what it answers, so this
+            # only affects the gate, not the quality of legal guidance.
             return {
                 "success": True,
-                "is_legal": False,
+                "is_legal": True,
                 "case_type": None,
                 "confidence": 0.5,
-                "summary": "Unable to parse AI response",
-                "reason_if_rejected": "Classifier response was not parseable; ask user to clarify legal issue"
+                "summary": "Classifier response unparseable; allowing through",
+                "reason_if_rejected": None
             }
 
     except Exception as e:
         logger.error(f"Legal intent detection failed: {str(e)}")
-        # Fail-safe: on classifier failure, treat as NOT legal so the bot
-        # asks for clarification instead of answering non-legal queries.
+        # Fail-safe: on classifier failure, ALLOW the query through (do NOT
+        # reject). Rejecting on failure causes valid legal queries to be
+        # blocked whenever the LLM service is slow / errors out.
         return {
             "success": False,
-            "is_legal": False,
+            "is_legal": True,
             "error": str(e),
             "case_type": None,
             "confidence": 0.5

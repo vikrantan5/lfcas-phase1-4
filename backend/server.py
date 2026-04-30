@@ -3640,6 +3640,7 @@ async def get_voice_session_messages(
     except Exception as e:
         logger.error(f"Error getting session messages: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get messages: {str(e)}")
+
 @api_router.post("/voice/get-next-question")
 async def get_next_question(
     request: dict,
@@ -3674,14 +3675,9 @@ async def get_next_question(
 
         # ---------------------------------------------------------------
         # LEGAL-ONLY GUARD (AI-BASED, NOT KEYWORDS)
-        # Use Groq to intelligently decide whether this conversation is
-        # about a legal/case matter. If NOT, politely refuse instead of
-        # generating a generic answer. Skip for trivially short inputs
-        # (<= 3 chars) — wait for more context.
         # ---------------------------------------------------------------
         if user_message and len(user_message.strip()) > 3:
             try:
-                # Classify using the whole conversation so context is preserved
                 combined_text = "".join(
                     f"{m['role']}: {m['content']}" for m in conversation_history
                 )
@@ -3690,9 +3686,6 @@ async def get_next_question(
                 is_legal = intent.get("is_legal", True)
                 confidence = intent.get("confidence", 0.5) or 0.5
 
-                # STRICT: Reject whenever the AI classifier says NOT legal.
-                # Earlier code required confidence >= 0.6 which let general
-                # knowledge questions (e.g. "capital of India") slip through.
                 if is_legal is False:
                     refusal = {
                         "english": "I can only help with legal or case-related matters (for example: divorce, property disputes, child custody, domestic violence, dowry harassment, maintenance, fraud, cheating, tenant issues, etc.). Your question doesn't seem to be a legal problem. Please describe the legal issue you're facing so I can assist you.",
@@ -3706,8 +3699,6 @@ async def get_next_question(
                         "non_legal": True
                     }
             except Exception as intent_err:
-                # On classifier failure, err on the side of caution and ask
-                # the user to rephrase as a legal question.
                 logger.warning(f"Legal intent classifier failed: {intent_err}")
                 fallback_refusal = {
                     "english": "I can only assist with legal or case-related matters. Please describe the legal issue you are facing (e.g., divorce, property dispute, harassment, fraud).",
@@ -3720,44 +3711,53 @@ async def get_next_question(
                     "non_legal": True
                 }
         
-        # Continue with normal flow - generate next question based on conversation
-        # Determine next question based on conversation stage
+        # Continue with normal flow
         from groq import Groq
         groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
         
-        # Enhanced system prompt for REAL-TIME CONVERSATIONAL BEHAVIOR
-        # NOTE: Bengali is intentionally disabled - chatbot must only respond in English or Hindi
+        # Language enforcement
         lang_instructions = {
             "english": "Respond ONLY in English. Do NOT use Bengali, Bangla, or any other regional language.",
             "hindi": "केवल हिंदी में जवाब दें। कोई अंग्रेजी या बंगाली शब्द न इस्तेमाल करें।"
         }
-        # Force non-supported languages to English
         if language not in lang_instructions:
             language = "english"
         
-        # === CONCISE LEGAL ASSISTANT PROMPT (max 3-4 short questions) ===
-        system_prompt = f"""You are an Indian legal intake assistant.
+        # === HUMAN-LIKE LEGAL INTAKE ASSISTANT PROMPT ===
+        system_prompt = f"""You are a warm, experienced Indian legal advisor sitting across from a client in your office.
 
 LANGUAGE: {lang_instructions.get(language, 'Respond in English')}
 
-GOAL: Understand the user's legal issue in EXACTLY 3 to 4 short, relevant questions.
+PERSONALITY:
+- Speak like a real human lawyer, not a robot.
+- Be warm, kind, and genuinely empathetic. If the user is distressed, acknowledge their pain briefly.
+- Use natural, conversational language — short sentences, simple words.
+- NEVER sound robotic, formal, or bureaucratic.
+- NEVER give legal advice or cite sections yet.
+- NEVER repeat a question the user already answered.
 
-STRICT RULES:
-- Each question MUST be a SINGLE short sentence (under 25 words).
-- Ask ONE question at a time. Never bundle questions.
-- ONLY ask LEGALLY RELEVANT questions (relationship status, duration, location/jurisdiction, urgency, harm suffered, parties involved, what relief is needed).
-- Do NOT give legal advice yet, do NOT cite sections.
-- Do NOT repeat a question already answered.
-- Be empathetic but extremely brief.
+GOAL:
+Listen to the user's full legal problem. Keep asking short, relevant follow-up questions until you have a COMPLETE picture of:
+- What happened (the incident or dispute)
+- When it started / key dates
+- Where (jurisdiction / location)
+- Who is involved (parties, witnesses)
+- What harm or loss was suffered
+- What relief or outcome the user wants
+- Any urgent or time-sensitive issues
 
-QUESTION COUNT (very important):
-- CURRENT_USER_RESPONSES = {user_responses}
-- If CURRENT_USER_RESPONSES == 1: ask Question 2 (most important detail, e.g., type/duration).
-- If CURRENT_USER_RESPONSES == 2: ask Question 3 (location/jurisdiction OR current living situation).
-- If CURRENT_USER_RESPONSES == 3: ask Question 4 — the FINAL question about what relief/outcome they want.
-- If CURRENT_USER_RESPONSES >= 4: STOP. Reply with ONE short empathetic line like "I understand your issue. Please click Analyze Case." and APPEND the literal token READY_TO_ANALYZE at the very end.
+STRICT FORMAT RULES:
+- Keep responses VERY SHORT — 1 to 2 sentences max. Never more than 25 words total.
+- If acknowledging their problem, do it in ONE brief sympathetic line, then ask the next question.
+- Ask ONLY ONE question at a time. Never bundle questions.
+- Only ask legally relevant things. Do NOT ask generic "anything else?" questions.
 
-NEVER ask more than 4 questions total. Respond now to the user's latest message:
+WHEN TO STOP:
+- Only suggest "Analyze Case" when the user has FULLY explained their problem and you have all key details.
+- If the user says something like "that's all", "I have told everything", "no more details", or indicates they are done — give ONE short warm line like "I understand. Please click Analyze Case." and APPEND the literal token READY_TO_ANALYZE at the very end.
+- If the user is still sharing new information, KEEP LISTENING and ask the next relevant question.
+
+Respond now to the user's latest message:
 """
         
         messages_for_groq = [{"role": "system", "content": system_prompt}] + conversation_history
@@ -3765,20 +3765,18 @@ NEVER ask more than 4 questions total. Respond now to the user's latest message:
         response = groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=messages_for_groq,
-            temperature=0.5,
-            max_tokens=150
+            temperature=0.7,
+            max_tokens=120
         )
         
         next_question = response.choices[0].message.content
         
-           # Check if AI thinks we have enough information - 4-question cap
-        ready_to_analyze = "READY_TO_ANALYZE" in next_question or user_responses >= 4
+        # Check if AI thinks we have enough information
+        ready_to_analyze = "READY_TO_ANALYZE" in next_question
         
         if ready_to_analyze:
-            # Remove the READY_TO_ANALYZE marker if present
             next_question = next_question.replace("READY_TO_ANALYZE", "").strip()
 
-            # Short completion line (no long paragraph)
             if not next_question or len(next_question) < 10:
                 next_question = {
                     "english": "I understand your issue. Please click 'Analyze Case' to see the details.",
